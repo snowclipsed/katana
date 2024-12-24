@@ -11,6 +11,47 @@ const testing = std.testing;
 const expectEqual = testing.expectEqual;
 const expectError = testing.expectError;
 
+/// Transposes a 2D tensor in-place.
+///
+/// This function takes a tensor of type `T` and transposes it, effectively
+/// swapping its rows and columns. The tensor must be 2-dimensional; otherwise,
+/// an `UnsupportedDimension` error is returned.
+///
+/// The function allocates new memory for the transposed data, copies the
+/// transposed elements into this new memory, frees the old data, and updates
+/// the tensor's data pointer and shape to reflect the transposition.
+///
+/// ## Parameters:
+/// - `T`: The type of the elements in the tensor.
+/// - `tensor`: A pointer to the tensor to be transposed.
+///
+/// ## Returns:
+/// - `!void`: Returns `void` on success, or an error if the tensor is not
+///   2-dimensional or if memory allocation fails.
+///
+/// ## Errors:
+/// - `UnsupportedDimension`: The tensor is not 2-dimensional.
+/// - Any error that can be returned by the allocator's `alignedAlloc` method.
+///
+/// ## Example:
+/// ```zig
+/// const std = @import("std");
+/// const Tensor = @import("tensor.zig").Tensor;
+/// const allocator = std.heap.page_allocator;
+///
+/// var tensor = Tensor(f32).init(allocator, .{2, 3});
+/// tensor.data[0] = 1.0;
+/// tensor.data[1] = 2.0;
+/// tensor.data[2] = 3.0;
+/// tensor.data[3] = 4.0;
+/// tensor.data[4] = 5.0;
+/// tensor.data[5] = 6.0;
+///
+/// try transpose(f32, &tensor);
+///
+/// // tensor.shape is now .{3, 2}
+/// // tensor.data is now .{1.0, 4.0, 2.0, 5.0, 3.0, 6.0}
+/// ```
 // Tensor Operations
 pub fn transpose(comptime T: type, tensor: *Tensor(T)) !void {
     if (tensor.shape.len != 2) return error.UnsupportedDimension;
@@ -34,11 +75,33 @@ pub fn transpose(comptime T: type, tensor: *Tensor(T)) !void {
     tensor.shape[1] = temp;
 }
 
-/// Transposes a tensor by swapping specified dimensions
+/// Transposes a tensor by swapping specified dimensions.
+///
+/// This function takes a tensor and two dimensions, and swaps the specified dimensions
+/// to produce a transposed tensor. The function performs the following steps:
+/// 1. Validates the dimensions to ensure they are within the bounds of the tensor's shape.
+/// 2. Calculates the strides for the current shape of the tensor.
+/// 3. Creates a new shape with the specified dimensions swapped.
+/// 4. Allocates memory for the transposed data.
+/// 5. Calculates the new strides for the transposed shape.
+/// 6. Creates coordinate arrays to keep track of the element positions.
+/// 7. Performs the transpose operation by iterating over each element, calculating the
+///    source coordinates, swapping the coordinates for the transposed dimensions, and
+///    copying the data to the new transposed tensor.
+/// 8. Updates the tensor with the new data and shape.
+///
 /// Parameters:
-/// - tensor: Input tensor to transpose
-/// - dim0: First dimension to swap
-/// - dim1: Second dimension to swap
+/// - `T`: The type of the elements in the tensor.
+/// - `tensor`: A pointer to the tensor to transpose.
+/// - `dim0`: The first dimension to swap.
+/// - `dim1`: The second dimension to swap.
+///
+/// Returns:
+/// - `!void`: Returns an error if the dimensions are invalid or if memory allocation fails.
+///
+/// Errors:
+/// - `error.InvalidDimension`: If either `dim0` or `dim1` is out of bounds of the tensor's shape.
+/// - `error.OutOfMemory`: If memory allocation fails.
 pub fn transposeAxes(comptime T: type, tensor: *Tensor(T), dim0: usize, dim1: usize) !void {
     if (dim0 >= tensor.shape.len or dim1 >= tensor.shape.len) {
         return error.InvalidDimension;
@@ -119,6 +182,36 @@ pub fn transposeAxes(comptime T: type, tensor: *Tensor(T), dim0: usize, dim1: us
     tensor.shape = new_shape;
 }
 
+/// Adds the elements of one tensor to another tensor element-wise.
+///
+/// This function performs an element-wise addition of the elements in `other` tensor
+/// to the corresponding elements in the `tensor`. Both tensors must have the same shape.
+///
+/// If the shapes of the two tensors do not match, an error of type `ShapeMismatch` is returned.
+///
+/// # Parameters
+/// - `T`: The type of the elements in the tensors.
+/// - `tensor`: A pointer to the tensor to which the elements of `other` will be added.
+/// - `other`: The tensor whose elements will be added to `tensor`.
+///
+/// # Errors
+/// - `ShapeMismatch`: Returned if the shapes of the two tensors do not match.
+///
+/// # Example
+/// ```zig
+/// const std = @import("std");
+/// const Tensor = @import("tensor.zig").Tensor;
+/// const add = @import("ops.zig").add;
+///
+/// var tensor1 = Tensor(f32, .{2, 2}, .{1.0, 2.0, 3.0, 4.0});
+/// var tensor2 = Tensor(f32, .{2, 2}, .{5.0, 6.0, 7.0, 8.0});
+///
+/// try add(f32, &tensor1, tensor2);
+/// // tensor1 now contains {6.0, 8.0, 10.0, 12.0}
+/// ```
+///
+/// # Notes
+/// - The function assumes that the `tensor` and `other` have the same shape and does not perform any broadcasting.
 pub fn add(comptime T: type, tensor: *Tensor(T), other: Tensor(T)) !void {
     if (!std.mem.eql(usize, tensor.shape, other.shape)) {
         std.debug.print("tensor shape: {d}\n", .{tensor.shape});
@@ -132,6 +225,31 @@ pub fn add(comptime T: type, tensor: *Tensor(T), other: Tensor(T)) !void {
     }
 }
 
+/// Subtracts the elements of one tensor from another tensor element-wise.
+///
+/// This function performs an element-wise subtraction of the `other` tensor from the `tensor`.
+/// Both tensors must have the same shape for the operation to be valid.
+///
+/// # Parameters
+/// - `T`: The type of the elements in the tensors.
+/// - `tensor`: A pointer to the tensor from which elements will be subtracted. The result will be stored in this tensor.
+/// - `other`: The tensor whose elements will be subtracted from the `tensor`.
+///
+/// # Returns
+/// - `void`: If the operation is successful.
+/// - `error.ShapeMismatch`: If the shapes of the two tensors do not match.
+///
+/// # Errors
+/// This function returns an error if the shapes of the two tensors do not match. The error returned is `error.ShapeMismatch`.
+///
+/// # Example
+/// ```zig
+/// const T = f32;
+/// var tensor1 = Tensor(T){ .shape = [2]usize{2, 2}, .data = [4]T{1.0, 2.0, 3.0, 4.0} };
+/// const tensor2 = Tensor(T){ .shape = [2]usize{2, 2}, .data = [4]T{0.5, 1.5, 2.5, 3.5} };
+/// try subtract(T, &tensor1, tensor2);
+/// // tensor1.data is now [0.5, 0.5, 0.5, 0.5]
+/// ```
 pub fn subtract(comptime T: type, tensor: *Tensor(T), other: Tensor(T)) !void {
     if (!std.mem.eql(usize, tensor.shape, other.shape)) {
         std.debug.print("tensor shape: {d}\n", .{tensor.shape});
@@ -145,6 +263,32 @@ pub fn subtract(comptime T: type, tensor: *Tensor(T), other: Tensor(T)) !void {
     }
 }
 
+/// Multiplies the elements of two tensors element-wise and stores the result in the first tensor.
+///
+/// This function performs an element-wise multiplication of the elements in `tensor` and `other`.
+/// The result of the multiplication is stored in `tensor`.
+///
+/// # Parameters
+/// - `T`: The type of the elements in the tensors.
+/// - `tensor`: A pointer to the first tensor, which will store the result of the multiplication.
+/// - `other`: The second tensor to be multiplied with the first tensor.
+///
+/// # Returns
+/// - `void`: Returns nothing on success.
+/// - `error.ShapeMismatch`: If the shapes of the two tensors do not match.
+///
+/// # Errors
+/// This function returns an error if the shapes of the two tensors do not match. The shapes must be equal
+/// for the element-wise multiplication to be performed.
+///
+/// # Example
+/// ```zig
+/// const T = f32;
+/// var tensor1 = Tensor(T, .{2, 2}, .{1.0, 2.0, 3.0, 4.0});
+/// const tensor2 = Tensor(T, .{2, 2}, .{5.0, 6.0, 7.0, 8.0});
+/// try multiply(T, &tensor1, tensor2);
+/// // tensor1.data is now .{5.0, 12.0, 21.0, 32.0}
+/// ```
 pub fn multiply(comptime T: type, tensor: *Tensor(T), other: Tensor(T)) !void {
     if (!std.mem.eql(usize, tensor.shape, other.shape)) {
         std.debug.print("tensor shape: {d}\n", .{tensor.shape});
@@ -158,12 +302,46 @@ pub fn multiply(comptime T: type, tensor: *Tensor(T), other: Tensor(T)) !void {
     }
 }
 
+/// Adds a scalar value to each element in the tensor.
+///
+/// This function iterates over each element in the tensor and adds the given scalar value to it.
+///
+/// Parameters:
+/// - `T`: The type of the elements in the tensor.
+/// - `tensor`: A pointer to the tensor to which the scalar value will be added.
+/// - `scalar`: The scalar value to add to each element in the tensor.
+///
+/// Example:
+/// ```zig
+/// const tensor = Tensor(f32, .{1.0, 2.0, 3.0});
+/// scalarAdd(f32, &tensor, 1.0);
 pub fn scalarAdd(comptime T: type, tensor: *Tensor(T), scalar: T) void {
     for (tensor.data, 0..) |_, i| {
         tensor.data[i] += scalar;
     }
 }
 
+/// Multiplies each element in the given tensor by a scalar value.
+///
+/// This function iterates over all elements in the tensor and multiplies each
+/// element by the provided scalar value, modifying the tensor in place.
+///
+/// - Parameters:
+///   - T: The type of the elements in the tensor. This is a compile-time parameter.
+///   - tensor: A pointer to the tensor to be modified. The tensor's data will be
+///     multiplied by the scalar value.
+///   - scalar: The scalar value to multiply each element in the tensor by.
+///
+/// # Example
+///
+/// ```zig
+/// const Tensor = @import("tensor.zig").Tensor;
+/// const ops = @import("ops.zig");
+///
+/// var tensor = Tensor(f32, .{1.0, 2.0, 3.0});
+/// ops.scalarMultiply(f32, &tensor, 2.0);
+/// // tensor.data is now {2.0, 4.0, 6.0}
+/// ```
 pub fn scalarMultiply(comptime T: type, tensor: *Tensor(T), scalar: T) void {
     for (tensor.data, 0..) |_, i| {
         tensor.data[i] *= scalar;
@@ -174,10 +352,32 @@ pub fn scalarMultiply(comptime T: type, tensor: *Tensor(T), scalar: T) void {
 /// The smaller tensor is broadcast to match the shape of the larger tensor along
 /// matching dimensions from right to left.
 /// For example: [seq_len, dim] + [dim] -> broadcasts [dim] across seq_len
-/// Performs broadcasted addition between two tensors.
-/// The smaller tensor is broadcast to match the shape of the larger tensor along
-/// matching dimensions from right to left.
-/// For example: [seq_len, dim] + [dim] -> broadcasts [dim] across seq_len
+///
+/// # Parameters
+/// - `T`: The type of the elements in the tensors.
+/// - `a`: A pointer to the larger tensor which will be modified in place.
+/// - `b`: The smaller tensor which will be broadcast and added to `a`.
+///
+/// # Returns
+/// - `!void`: Returns an error if the shapes are not compatible for broadcasting.
+///
+/// # Errors
+/// - `error.InvalidBroadcast`: If the shape of `b` is larger than the shape of `a`.
+/// - `error.IncompatibleBroadcast`: If the shapes of `a` and `b` are not compatible for broadcasting.
+///
+/// # Example
+/// ```zig
+/// const T = f32;
+/// var a = Tensor(T, .{2, 3}, .{1.0, 2.0, 3.0, 4.0, 5.0, 6.0});
+/// const b = Tensor(T, .{3}, .{0.5, 1.5, 2.5});
+/// try broadcast_add(T, &a, b);
+/// // a.data is now {1.5, 3.5, 5.5, 4.5, 6.5, 8.5}
+/// ```
+///
+/// This function first checks if the shapes of the tensors are compatible for broadcasting.
+/// If they are, it performs the addition in place, modifying the larger tensor `a`.
+/// It handles both the common case of adding a 1D tensor to each row of a 2D tensor,
+/// as well as the general case for tensors of any shape.
 pub fn broadcast_add(comptime T: type, a: *Tensor(T), b: Tensor(T)) !void {
     // Check that shapes can be broadcast
     if (b.shape.len > a.shape.len) {
@@ -250,6 +450,31 @@ pub fn broadcast_add(comptime T: type, a: *Tensor(T), b: Tensor(T)) !void {
     }
 }
 
+/// Helper function for broadcasting multiplication.
+///
+/// This function performs element-wise multiplication of two tensors, `a` and `b`,
+/// with broadcasting support. The result is stored back in tensor `a`.
+///
+/// - Parameters:
+///   - T: The type of the elements in the tensors.
+///   - a: A pointer to the tensor `a` which will be modified to store the result.
+///   - b: The tensor `b` which will be broadcasted and multiplied with tensor `a`.
+///
+/// - Returns: This function returns an error if the copy operation for the temporary
+///   result tensor fails.
+///
+/// - Note: The function assumes that the dimensions of tensor `b` are compatible
+///   for broadcasting with tensor `a`. The broadcasting is performed by repeating
+///   the elements of tensor `b` as necessary to match the size of tensor `a`.
+///
+/// Example:
+/// ```zig
+/// const T = f32;
+/// var a = Tensor(T, .{1.0, 2.0, 3.0, 4.0});
+/// const b = Tensor(T, .{2.0});
+/// try broadcast_multiply(T, &a, b);
+/// // a.data is now {2.0, 4.0, 6.0, 8.0}
+/// ```
 // Helper function for broadcasting multiplication
 pub fn broadcast_multiply(comptime T: type, a: *Tensor(T), b: Tensor(T)) !void {
     // Create a temporary tensor for the result
@@ -270,6 +495,23 @@ pub fn broadcast_multiply(comptime T: type, a: *Tensor(T), b: Tensor(T)) !void {
     @memcpy(a.data, result.data);
 }
 
+/// Helper function for broadcasting subtraction.
+///
+/// This function performs element-wise subtraction of two tensors, where the second tensor
+/// is broadcasted to match the shape of the first tensor. The result is stored back in the
+/// first tensor.
+///
+/// - Parameters:
+///   - T: The type of the elements in the tensors.
+///   - a: A pointer to the first tensor, which will be modified to store the result.
+///   - b: The second tensor, which will be broadcasted and subtracted from the first tensor.
+///
+/// - Returns: An error if the operation fails.
+///
+/// - Errors:
+///   - Any error that can be returned by the `copy` method of the tensor.
+///
+/// - Note: The function assumes that the dimensions of the tensors are compatible for broadcasting.
 // Helper function for broadcasting subtraction
 pub fn broadcast_subtract(comptime T: type, a: *Tensor(T), b: Tensor(T)) !void {
     var result = try a.copy();
@@ -286,6 +528,29 @@ pub fn broadcast_subtract(comptime T: type, a: *Tensor(T), b: Tensor(T)) !void {
     @memcpy(a.data, result.data);
 }
 
+/// Multiplies two 2D tensors (matrices) and returns the resulting tensor.
+///
+/// This function performs matrix multiplication on two input tensors. The input tensors must be 2-dimensional
+/// and their inner dimensions must be compatible for matrix multiplication (i.e., the number of columns in the
+/// first tensor must equal the number of rows in the second tensor).
+///
+/// - Parameters:
+///   - T: The element type of the tensors.
+///   - tensor: A pointer to the first tensor (left operand) of type `Tensor(T)`.
+///   - other: The second tensor (right operand) of type `Tensor(T)`.
+///
+/// - Returns: A new tensor of type `Tensor(T)` containing the result of the matrix multiplication.
+///
+/// - Errors:
+///   - `UnsupportedDimension`: If either of the input tensors is not 2-dimensional.
+///   - `IncompatibleDimensions`: If the inner dimensions of the input tensors are not compatible for matrix multiplication.
+///
+/// - Example:
+/// ```zig
+/// const result = try matmul(f32, &tensorA, tensorB);
+/// ```
+///
+/// - Note: The function assumes that the input tensors are properly initialized and allocated.
 pub fn matmul(comptime T: type, tensor: *Tensor(T), other: Tensor(T)) !Tensor(T) {
     if (tensor.shape.len != 2 or other.shape.len != 2) {
         return error.UnsupportedDimension;
@@ -313,6 +578,40 @@ pub fn matmul(comptime T: type, tensor: *Tensor(T), other: Tensor(T)) !Tensor(T)
     return result;
 }
 
+/// Computes the outer product of two 1-dimensional tensors.
+///
+/// The outer product of two vectors `tensor` and `other` is a matrix where each element
+/// `(i, j)` is the product of `tensor[i]` and `other[j]`.
+///
+/// # Parameters
+/// - `T`: The type of the elements in the tensors.
+/// - `tensor`: The first input tensor, which must be 1-dimensional.
+/// - `other`: The second input tensor, which must be 1-dimensional.
+///
+/// # Returns
+/// - A new tensor representing the outer product of `tensor` and `other`.
+///
+/// # Errors
+/// - `error.InvalidDimensions`: If either `tensor` or `other` is not 1-dimensional.
+///
+/// # Example
+/// ```zig
+/// const T = f32;
+/// const tensor1 = try Tensor(T).init(allocator, &[_]T{1.0, 2.0});
+/// const tensor2 = try Tensor(T).init(allocator, &[_]T{3.0, 4.0});
+/// const result = try outer(T, tensor1, tensor2);
+/// defer {
+///     tensor1.deinit();
+///     tensor2.deinit();
+///     result.deinit();
+/// }
+/// // result is a 2x2 tensor with values:
+/// // [[3.0, 4.0],
+/// //  [6.0, 8.0]]
+/// ```
+///
+/// # Notes
+/// - The function assumes that the input tensors are properly initialized and deinitialized.
 pub fn outer(comptime T: type, tensor: Tensor(T), other: Tensor(T)) !Tensor(T) {
     if (tensor.shape.len != 1 or other.shape.len != 1) {
         return error.InvalidDimensions;
@@ -333,6 +632,33 @@ pub fn outer(comptime T: type, tensor: Tensor(T), other: Tensor(T)) !Tensor(T) {
     return result;
 }
 
+/// Accumulates the values of `other` tensor into the `tensor` in-place.
+///
+/// This function performs an element-wise addition of the `other` tensor to the `tensor`
+/// and then accumulates the result in a cumulative sum fashion.
+///
+/// # Parameters
+/// - `T`: The type of the elements in the tensors.
+/// - `tensor`: A pointer to the tensor that will be modified in-place.
+/// - `other`: The tensor whose values will be added to `tensor`.
+///
+/// # Returns
+/// - `void`: Returns nothing on success.
+///
+/// # Errors
+/// - `ShapeMismatch`: If the shapes of `tensor` and `other` do not match.
+///
+/// # Example
+/// ```zig
+/// var tensor = Tensor(f32, .{2, 2}, .{1.0, 2.0, 3.0, 4.0});
+/// var other = Tensor(f32, .{2, 2}, .{0.5, 1.5, 2.5, 3.5});
+/// try accumulate(f32, &tensor, other);
+/// // tensor.data is now {1.5, 4.0, 9.0, 16.0}
+/// ```
+///
+/// # Notes
+/// - The function assumes that the `tensor` and `other` have the same shape.
+/// - The function performs an in-place modification of the `tensor`.
 pub fn accumulate(comptime T: type, tensor: *Tensor(T), other: Tensor(T)) !void {
     if (!std.mem.eql(usize, tensor.shape, other.shape)) {
         std.debug.print("tensor shape: {d}\n", .{tensor.shape});
@@ -353,8 +679,31 @@ pub fn accumulate(comptime T: type, tensor: *Tensor(T), other: Tensor(T)) !void 
 }
 
 /// Gets a chunk of a tensor along a specified dimension.
-/// For example, if tensor has shape [2,6] and we chunk along dim 1 with chunk_size 2,
-/// we get 3 tensors of shape [2,2]
+///
+/// This function divides a tensor into equal-sized chunks along a specified dimension and returns the chunk at the given index.
+///
+/// # Parameters
+/// - `T`: The type of the elements in the tensor.
+/// - `tensor`: The input tensor to be chunked.
+/// - `dim`: The dimension along which to chunk the tensor.
+/// - `chunk_idx`: The index of the chunk to retrieve.
+/// - `num_chunks`: The total number of chunks to divide the tensor into.
+///
+/// # Returns
+/// - A tensor containing the specified chunk of the input tensor.
+///
+/// # Errors
+/// - `error.InvalidDimension`: If the specified dimension is out of bounds.
+/// - `error.InvalidNumChunks`: If the number of chunks is zero or greater than the size of the specified dimension.
+/// - `error.InvalidChunkIndex`: If the chunk index is out of bounds.
+/// - `error.UnevenChunkSize`: If the tensor cannot be evenly divided into the specified number of chunks.
+///
+/// # Example
+/// ```zig
+/// const tensor = Tensor(f32).initFromSlice(allocator, &[2, 6], &[_]f32{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12});
+/// const chunk = try getChunk(f32, tensor, 1, 0, 3);
+/// // chunk now contains a tensor with shape [2, 2] and data [1, 2, 3, 4]
+/// ```
 pub fn getChunk(comptime T: type, tensor: Tensor(T), dim: usize, chunk_idx: usize, num_chunks: usize) !Tensor(T) {
     // Validate inputs
     if (dim >= tensor.shape.len) {
@@ -430,6 +779,25 @@ pub fn getChunk(comptime T: type, tensor: Tensor(T), dim: usize, chunk_idx: usiz
     return result;
 }
 
+/// Calculate the index in a flattened array from n-dimensional coordinates.
+///
+/// This function takes the shape of an n-dimensional array and the coordinates
+/// within that array, and calculates the corresponding index in the flattened
+/// (1-dimensional) representation of the array.
+///
+/// # Parameters
+/// - `shape`: A slice of `usize` representing the dimensions of the n-dimensional array.
+/// - `coords`: A slice of `usize` representing the coordinates within the n-dimensional array.
+///
+/// # Returns
+/// - `usize`: The index in the flattened array corresponding to the given coordinates.
+///
+/// # Example
+/// ```zig
+/// const shape = [_]usize{3, 4, 5}; // 3x4x5 array
+/// const coords = [_]usize{2, 1, 3}; // Coordinates in the 3x4x5 array
+/// const index = calculateIndex(shape, coords); // index will be 53
+/// ```
 // Calculate index in flattened array from n-dimensional coordinates
 pub fn calculateIndex(shape: []const usize, coords: []const usize) usize {
     var index: usize = 0;
@@ -443,6 +811,21 @@ pub fn calculateIndex(shape: []const usize, coords: []const usize) usize {
     return index;
 }
 
+/// Checks the stability of the given tensor by inspecting its elements for NaN, positive infinity, and negative infinity values.
+///
+/// This function retrieves stability information for the tensor and returns an appropriate error if any instability is detected.
+///
+/// Parameters:
+/// - `T`: The type of the elements in the tensor.
+/// - `tensor`: The tensor to be checked.
+///
+/// Returns:
+/// - `StabilityError.HasNaN` if the tensor contains NaN values.
+/// - `StabilityError.HasPositiveInfinity` if the tensor contains positive infinity values.
+/// - `StabilityError.HasNegativeInfinity` if the tensor contains negative infinity values.
+///
+/// Errors:
+/// - Returns an error if the stability information cannot be retrieved.
 pub fn checkStability(comptime T: type, tensor: Tensor(T)) !void {
     const info = try getStabilityInfo(T, tensor);
     if (info.has_nan) {
@@ -456,6 +839,27 @@ pub fn checkStability(comptime T: type, tensor: Tensor(T)) !void {
     }
 }
 
+/// Analyzes the stability of a tensor by checking for NaN, positive infinity, and negative infinity values.
+///
+/// This function iterates over the elements of the given tensor and collects information about the presence
+/// of NaN, positive infinity, and negative infinity values. It returns a `StabilityInfo` struct containing
+/// the results of this analysis.
+///
+/// ## Parameters
+/// - `T`: The type of the elements in the tensor. This is a compile-time parameter.
+/// - `tensor`: The tensor to be analyzed.
+///
+/// ## Returns
+/// - `Tensor(T).StabilityInfo`: A struct containing information about the stability of the tensor, including
+///   counts and indices of NaN, positive infinity, and negative infinity values.
+///
+/// ## Errors
+/// This function does not return any errors.
+///
+/// ## Example
+/// ```zig
+/// const tensor = Tensor(f32){ .data = [_]f32{ 1.0, std.math.nan, std.math.inf, -std.math.inf } };
+/// const info = try getStabilityInfo(f32, tensor);
 pub fn getStabilityInfo(comptime T: type, tensor: Tensor(T)) !Tensor(T).StabilityInfo {
     var info = Tensor(@TypeOf(tensor.data[0])).StabilityInfo{};
 
@@ -489,21 +893,75 @@ pub fn getStabilityInfo(comptime T: type, tensor: Tensor(T)) !Tensor(T).Stabilit
     return info;
 }
 
+/// Checks if the given tensor is stable, meaning it does not contain any NaN, positive infinity, or negative infinity values.
+///
+/// This function retrieves stability information for the tensor and verifies that it does not contain any NaN, positive infinity, or negative infinity values.
+///
+/// - Parameters:
+///   - T: The type of the elements in the tensor.
+///   - tensor: The tensor to check for stability.
+/// - Returns: A boolean indicating whether the tensor is stable.
+/// - Throws: An error if retrieving the stability information fails.
 pub fn isStable(comptime T: type, tensor: Tensor(T)) !bool {
     const info = try getStabilityInfo(T, tensor);
     return !info.has_nan and !info.has_pos_inf and !info.has_neg_inf;
 }
 
+/// Checks if the given tensor contains any NaN (Not-a-Number) values.
+///
+/// This function takes a tensor of a specified type and checks if it contains
+/// any NaN values. It returns a boolean indicating the presence of NaN values.
+///
+/// - Parameters:
+///   - T: The type of the elements in the tensor.
+///   - tensor: The tensor to be checked for NaN values.
+/// - Returns: A boolean indicating whether the tensor contains NaN values.
+/// - Throws: An error if there is an issue retrieving stability information for the tensor.
 pub fn hasNaN(comptime T: type, tensor: Tensor(T)) !bool {
     const info = try getStabilityInfo(T, tensor);
     return info.has_nan;
 }
 
+/// Checks if the given tensor contains any positive or negative infinity values.
+///
+/// This function examines the stability information of the tensor to determine
+/// if it contains any positive or negative infinity values.
+///
+/// - Parameters:
+///   - T: The type of the elements in the tensor.
+///   - tensor: The tensor to be checked for infinity values.
+///
+/// - Returns: A boolean indicating whether the tensor contains any positive or
+///   negative infinity values.
+///
+/// - Throws: An error if retrieving the stability information fails.
 pub fn hasInf(comptime T: type, tensor: Tensor(T)) !bool {
     const info = try getStabilityInfo(T, tensor);
     return info.has_pos_inf or info.has_neg_inf;
 }
 
+/// Replaces all NaN or Infinity values in the given tensor with a specified replacement value.
+/// This function only operates on tensors with floating-point data types.
+///
+/// ## Parameters:
+/// - `T`: The type of the elements in the tensor. This must be a floating-point type.
+/// - `tensor`: A pointer to the tensor whose NaN or Infinity values are to be replaced.
+/// - `replacement`: The value to replace NaN or Infinity values with.
+///
+/// ## Errors:
+/// This function does not return any errors.
+///
+/// ## Example:
+/// ```zig
+/// const std = @import("std");
+/// const Tensor = @import("tensor.zig").Tensor;
+/// const ops = @import("ops.zig");
+///
+/// var tensor = Tensor(f32).init([3]f32{ std.math.nan, 1.0, std.math.inf });
+/// try ops.replaceUnstable(f32, &tensor, 0.0);
+/// assert(tensor.data[0] == 0.0);
+/// assert(tensor.data[2] == 0.0);
+/// ```
 pub fn replaceUnstable(comptime T: type, tensor: *Tensor(T), replacement: T) !void {
     switch (@typeInfo(@TypeOf(tensor.data[0]))) {
         .Float => {
@@ -517,6 +975,55 @@ pub fn replaceUnstable(comptime T: type, tensor: *Tensor(T), replacement: T) !vo
     }
 }
 
+/// Concatenates two tensors along a specified dimension.
+///
+/// This function takes two tensors of the same type and concatenates them along the specified dimension.
+/// The resulting tensor will have a shape that is the same as the input tensors, except for the specified
+/// dimension, which will be the sum of the sizes of the input tensors along that dimension.
+///
+/// # Parameters
+/// - `T`: The type of the elements in the tensors.
+/// - `tensor`: The first tensor to concatenate.
+/// - `other`: The second tensor to concatenate.
+/// - `dim`: The dimension along which to concatenate the tensors.
+///
+/// # Returns
+/// A new tensor that is the result of concatenating the input tensors along the specified dimension.
+///
+/// # Errors
+/// This function will return an error if the tensors cannot be concatenated due to incompatible shapes or
+/// if there is an allocation failure.
+///
+/// # Example
+/// ```zig
+/// const std = @import("std");
+/// const Tensor = @import("tensor.zig").Tensor;
+/// const concat = @import("ops.zig").concat;
+///
+/// var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+/// defer _ = gpa.deinit();
+/// const allocator = gpa.allocator;
+///
+/// var tensor1 = try Tensor(f32).init(allocator, &[_]usize{2, 3});
+/// defer tensor1.deinit();
+/// tensor1.data = &[_]f32{1.0, 2.0, 3.0, 4.0, 5.0, 6.0};
+///
+/// var tensor2 = try Tensor(f32).init(allocator, &[_]usize{2, 3});
+/// defer tensor2.deinit();
+/// tensor2.data = &[_]f32{7.0, 8.0, 9.0, 10.0, 11.0, 12.0};
+///
+/// const result = try concat(f32, tensor1, tensor2, 0);
+/// defer result.deinit();
+///
+/// // The resulting tensor will have shape [4, 3] and data [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0]
+/// std.debug.print("Result shape: {}\n", .{result.shape});
+/// std.debug.print("Result data: {}\n", .{result.data});
+/// ```
+///
+/// # Notes
+/// - The function assumes that the input tensors have the same shape except for the specified dimension.
+/// - The function allocates memory for the new tensor and its shape, so it is important to free the allocated
+///   memory using the `deinit` method of the resulting tensor.
 pub fn concat(comptime T: type, tensor: Tensor(T), other: Tensor(T), dim: usize) !Tensor(T) {
     // Verify tensors can be concatenated
     try verifyCompatibleForConcat(T, tensor, other, dim);
@@ -671,6 +1178,34 @@ fn verifyCompatibleForConcat(comptime T: type, tensor: Tensor(T), other: Tensor(
     }
 }
 
+/// Stacks a list of tensors along a specified dimension.
+///
+/// This function takes a list of tensors with the same shape and stacks them
+/// along a new dimension, creating a new tensor with an additional dimension.
+///
+/// # Parameters
+/// - `T`: The type of the elements in the tensors.
+/// - `tensors`: A list of tensors to be stacked. All tensors must have the same shape.
+/// - `dim`: The dimension along which to stack the tensors. Must be less than or equal to the number of dimensions in the input tensors.
+///
+/// # Returns
+/// - `Tensor(T)`: A new tensor with an additional dimension, containing the stacked tensors.
+///
+/// # Errors
+/// - `error.EmptyTensorList`: If the input list of tensors is empty.
+/// - `error.ShapeMismatch`: If the input tensors do not all have the same shape.
+/// - `error.InvalidDimension`: If the specified dimension is greater than the number of dimensions in the input tensors.
+///
+/// # Example
+/// ```zig
+/// const tensor1 = Tensor(f32).init(...);
+/// const tensor2 = Tensor(f32).init(...);
+/// const stacked = try stack(f32, &[tensor1, tensor2], 0);
+/// ```
+///
+/// # Notes
+/// - The function allocates memory for the new tensor shape and strides, which is freed before returning.
+/// - The function calculates the strides for the result tensor to facilitate copying data from the input tensors.
 pub fn stack(comptime T: type, tensors: []const Tensor(T), dim: usize) !Tensor(T) {
     if (tensors.len == 0) {
         return error.EmptyTensorList;
@@ -776,7 +1311,21 @@ pub fn stack(comptime T: type, tensors: []const Tensor(T), dim: usize) !Tensor(T
     return result;
 }
 
-/// Convert negative dimension index to positive
+/// Convert a potentially negative dimension index to a positive index.
+///
+/// This function takes a dimension index `dim` which can be negative, and the total number of dimensions `n_dims`.
+/// If `dim` is negative, it is converted to a positive index by adding it to `n_dims`.
+/// If the resulting index is out of bounds, an `InvalidDimension` error is returned.
+///
+/// Parameters:
+/// - `dim`: The dimension index, which can be negative.
+/// - `n_dims`: The total number of dimensions, which must be a positive integer.
+///
+/// Returns:
+/// - The positive dimension index if `dim` is within bounds.
+///
+/// Errors:
+/// - `InvalidDimension`: If the resulting dimension index is out of bounds.
 pub fn normalizeDim(dim: isize, n_dims: usize) !usize {
     const n_dims_i: isize = @intCast(n_dims);
     if (dim >= 0) {
