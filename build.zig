@@ -6,6 +6,11 @@ pub fn build(b: *std.Build) void {
         .preferred_optimize_mode = .ReleaseSafe,
     });
 
+    // Create the module - this is needed for dependency usage
+    _ = b.addModule("tensor", .{
+        .root_source_file = .{ .cwd_relative = "src/tensor.zig" },
+    });
+
     // Create library artifact with ReleaseSafe
     const lib = b.addStaticLibrary(.{
         .name = "tensor",
