@@ -8,7 +8,7 @@ pub fn build(b: *std.Build) void {
 
     // Create the main tensor module
     const module = b.addModule("tensor", .{
-        .root_source_file = .{ .cwd_relative = "src/tensor.zig" },
+        .root_source_file = .{ .cwd_relative = "tensor.zig" },
     });
 
     _ = module;
@@ -16,7 +16,7 @@ pub fn build(b: *std.Build) void {
     // Create library artifact with ReleaseSafe
     const lib = b.addStaticLibrary(.{
         .name = "tensor",
-        .root_source_file = .{ .cwd_relative = "src/tensor.zig" },
+        .root_source_file = .{ .cwd_relative = "tensor.zig" },
         .target = target,
         .optimize = optimize,
     });
@@ -26,7 +26,7 @@ pub fn build(b: *std.Build) void {
 
     // Add tests with ReleaseSafe
     const main_tests = b.addTest(.{
-        .root_source_file = .{ .cwd_relative = "src/`ops_tests.zig" },
+        .root_source_file = .{ .cwd_relative = "ops_tests.zig" },
         .target = target,
         .optimize = optimize,
     });
