@@ -4,6 +4,7 @@ const ArrayList = std.ArrayList;
 const max_items_per_row = 6; // Number of elements to show per row
 const max_rows = 8; // Maximum number of rows to show before truncating
 const helper = @import("helper.zig");
+pub usingnamespace @import("ops.zig");
 
 pub fn Tensor(comptime DataType: type) type {
     return struct {
