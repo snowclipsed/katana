@@ -213,9 +213,9 @@ pub fn transposeAxes(comptime T: type, tensor: *Tensor(T), dim0: usize, dim1: us
 /// - The function performs an in-place modification of the `tensor`.
 pub fn accumulate(comptime T: type, tensor: *Tensor(T), other: Tensor(T)) !void {
     if (!std.mem.eql(usize, tensor.shape, other.shape)) {
-        std.debug.print("tensor shape: {d}\n", .{tensor.shape});
-        std.debug.print("other shape: {d}\n", .{other.shape});
-        std.debug.print("Error during accumulation", .{});
+        std.log.err("tensor shape: {d}\n", .{tensor.shape});
+        std.log.err("other shape: {d}\n", .{other.shape});
+        std.log.err("Error during accumulation \n", .{});
         return error.ShapeMismatch;
     }
 
@@ -527,8 +527,8 @@ fn verifyCompatibleForConcat(comptime T: type, tensor: Tensor(T), other: Tensor(
     // Check if all dimensions except concat dim are equal
     for (tensor.shape, 0..) |s, i| {
         if (i != dim and s != other.shape[i]) {
-            std.debug.print("tensor shape: {d}\n", .{tensor.shape});
-            std.debug.print("other shape: {d}\n", .{other.shape});
+            std.log.err("tensor shape: {d}\n", .{tensor.shape});
+            std.log.err("other shape: {d}\n", .{other.shape});
             return error.IncompatibleShapes;
         }
     }
@@ -573,7 +573,7 @@ pub fn stack(comptime T: type, tensors: []const Tensor(T), dim: usize) !Tensor(T
     // Validate all tensors have the same shape
     for (tensors[1..]) |tensor| {
         if (!std.mem.eql(usize, tensor.shape, ref_shape)) {
-            std.debug.print("Error during stacking", .{});
+            std.log.err("Error during stacking \n", .{});
             return error.ShapeMismatch;
         }
     }
@@ -696,43 +696,43 @@ pub fn normalizeDim(dim: isize, n_dims: usize) !usize {
 
 /// Flattens dimensions from start_dim to end_dim (inclusive)
 /// TODO: Convert to tensor intrinsic
-pub fn flatten(comptime T: type, tensor: *Tensor(T), start_dim: isize, end_dim: isize) !void {
-    const positive_start = try normalizeDim(start_dim, tensor.shape.len);
-    const positive_end = try normalizeDim(end_dim, tensor.shape.len);
+// pub fn flatten(comptime T: type, tensor: *Tensor(T), start_dim: isize, end_dim: isize) !void {
+//     const positive_start = try normalizeDim(start_dim, tensor.shape.len);
+//     const positive_end = try normalizeDim(end_dim, tensor.shape.len);
 
-    if (positive_start > positive_end) {
-        return error.InvalidDimRange;
-    }
+//     if (positive_start > positive_end) {
+//         return error.InvalidDimRange;
+//     }
 
-    // Calculate the size of the flattened dimension
-    var flat_size: usize = 1;
-    for (positive_start..positive_end + 1) |i| {
-        flat_size *= tensor.shape[i];
-    }
+//     // Calculate the size of the flattened dimension
+//     var flat_size: usize = 1;
+//     for (positive_start..positive_end + 1) |i| {
+//         flat_size *= tensor.shape[i];
+//     }
 
-    // Create new shape
-    const new_shape_len = tensor.shape.len - (positive_end - positive_start);
-    var new_shape = try tensor.allocator.alloc(usize, new_shape_len);
-    errdefer tensor.allocator.free(new_shape);
+//     // Create new shape
+//     const new_shape_len = tensor.shape.len - (positive_end - positive_start);
+//     var new_shape = try tensor.allocator.alloc(usize, new_shape_len);
+//     errdefer tensor.allocator.free(new_shape);
 
-    // Copy dimensions before flattened dimensions
-    @memcpy(new_shape[0..positive_start], tensor.shape[0..positive_start]);
+//     // Copy dimensions before flattened dimensions
+//     @memcpy(new_shape[0..positive_start], tensor.shape[0..positive_start]);
 
-    // Add flattened dimension
-    new_shape[positive_start] = flat_size;
+//     // Add flattened dimension
+//     new_shape[positive_start] = flat_size;
 
-    // Copy dimensions after flattened dimensions
-    if (positive_end + 1 < tensor.shape.len) {
-        @memcpy(
-            new_shape[positive_start + 1 ..],
-            tensor.shape[positive_end + 1 ..],
-        );
-    }
+//     // Copy dimensions after flattened dimensions
+//     if (positive_end + 1 < tensor.shape.len) {
+//         @memcpy(
+//             new_shape[positive_start + 1 ..],
+//             tensor.shape[positive_end + 1 ..],
+//         );
+//     }
 
-    // Free old shape and update with new shape
-    tensor.allocator.free(tensor.shape);
-    tensor.shape = new_shape;
-}
+//     // Free old shape and update with new shape
+//     tensor.allocator.free(tensor.shape);
+//     tensor.shape = new_shape;
+// }
 
 // Usage example:
 pub fn stackAndFlatten(comptime T: type, r: Tensor(T), i: Tensor(T), dim: isize) !Tensor(T) {
@@ -753,7 +753,7 @@ pub fn stackAndFlatten(comptime T: type, r: Tensor(T), i: Tensor(T), dim: isize)
     errdefer result.deinit();
 
     // Flatten the last two dimensions
-    try flatten(T, &result, @intCast(result.shape.len - 2), @intCast(result.shape.len - 1));
+    try result.flatten(@intCast(result.shape.len - 2), @intCast(result.shape.len - 1));
 
     return result;
 }
@@ -1072,9 +1072,9 @@ pub fn replaceUnstable(comptime T: type, tensor: *Tensor(T), replacement: T) !vo
 /// - The function assumes that the `tensor` and `other` have the same shape and does not perform any broadcasting.
 pub fn add(comptime T: type, tensor: *Tensor(T), other: Tensor(T)) !void {
     if (!std.mem.eql(usize, tensor.shape, other.shape)) {
-        std.debug.print("tensor shape: {d}\n", .{tensor.shape});
-        std.debug.print("other shape: {d}\n", .{other.shape});
-        std.debug.print("Error during addition", .{});
+        std.log.err("tensor shape: {d}\n", .{tensor.shape});
+        std.log.err("other shape: {d}\n", .{other.shape});
+        std.log.err("Error during addition \n", .{});
         return error.ShapeMismatch;
     }
 
@@ -1110,9 +1110,9 @@ pub fn add(comptime T: type, tensor: *Tensor(T), other: Tensor(T)) !void {
 /// ```
 pub fn subtract(comptime T: type, tensor: *Tensor(T), other: Tensor(T)) !void {
     if (!std.mem.eql(usize, tensor.shape, other.shape)) {
-        std.debug.print("tensor shape: {d}\n", .{tensor.shape});
-        std.debug.print("other shape: {d}\n", .{other.shape});
-        std.debug.print("Error during subtraction", .{});
+        std.log.err("tensor shape: {d}\n", .{tensor.shape});
+        std.log.err("other shape: {d}\n", .{other.shape});
+        std.log.err("Error during subtraction \n", .{});
         return error.ShapeMismatch;
     }
 
@@ -1149,9 +1149,9 @@ pub fn subtract(comptime T: type, tensor: *Tensor(T), other: Tensor(T)) !void {
 /// ```
 pub fn multiply(comptime T: type, tensor: *Tensor(T), other: Tensor(T)) !void {
     if (!std.mem.eql(usize, tensor.shape, other.shape)) {
-        std.debug.print("tensor shape: {d}\n", .{tensor.shape});
-        std.debug.print("other shape: {d}\n", .{other.shape});
-        std.debug.print("Error during multiplication", .{});
+        std.log.err("tensor shape: {d}\n", .{tensor.shape});
+        std.log.err("other shape: {d}\n", .{other.shape});
+        std.log.err("Error during multiplication \n", .{});
         return error.ShapeMismatch;
     }
 
@@ -1661,513 +1661,6 @@ const FreqsError = error{
     // Memory errors
     OutOfMemory,
 };
-
-/// Precomputes frequency values for a given dimension and range, using a specified theta value.
-/// This function generates a tensor containing the cosine and sine values of the frequencies.
-///
-/// # Parameters
-/// - `T`: The type of the tensor elements (must be a floating-point type).
-/// - `allocator`: The allocator to use for memory allocation.
-/// - `dim`: The dimension size (must be a positive even number).
-/// - `end`: The end value for the time range (must be a positive number).
-/// - `theta`: The theta value used in the frequency computation (must be a positive number).
-///
-/// # Returns
-/// - `Tensor(T)`: A tensor containing the precomputed frequency values.
-/// - `FreqsError`: An error if any of the input parameters are invalid or if numerical instability occurs.
-///
-/// # Errors
-/// - `DimensionTooSmall`: If `dim` is less than or equal to 0.
-/// - `DimensionNotEven`: If `dim` is not an even number.
-/// - `EndTooSmall`: If `end` is less than or equal to 0.
-/// - `ThetaTooSmall`: If `theta` is less than or equal to 0.
-/// - `ComputationOverflow`: If the computed power value is outside the range [-1000, 1000].
-/// - `NumericalInstability`: If any numerical instability is detected during the computation.
-///
-/// # Example
-/// ```zig
-/// const std = @import("std");
-/// const Tensor = @import("tensor.zig").Tensor;
-/// const precomputeFrequencies = @import("ops.zig").precomputeFrequencies;
-///
-/// const allocator = std.heap.page_allocator;
-/// const result = precomputeFrequencies(f32, allocator, 4, 10, 2.0) catch |err| {
-///     std.debug.print("Error: {}\n", .{err});
-///     return;
-/// };
-///
-/// defer result.deinit();
-/// std.debug.print("Result: {}\n", .{result});
-/// ```
-pub fn precomputeFrequencies(
-    comptime T: type,
-    allocator: std.mem.Allocator,
-    dim: usize,
-    end: usize,
-    theta: T,
-) FreqsError!Tensor(T) {
-    // Input validation
-    if (dim <= 0) return error.DimensionTooSmall;
-    if (dim % 2 != 0) return error.DimensionNotEven;
-    if (end <= 0) return error.EndTooSmall;
-    if (theta <= 0) return error.ThetaTooSmall;
-
-    // 1. Create initial frequencies
-    var freqs = try Tensor(T).init(allocator, &[_]usize{dim / 2});
-    errdefer freqs.deinit();
-
-    const dim_float: T = @floatFromInt(dim);
-    for (0..dim / 2) |i| {
-        const idx_float: T = @floatFromInt(i * 2);
-        const power = idx_float / dim_float; // Removed negative sign to match Python
-
-        // Check for potential overflow
-        if (power < -1000 or power > 1000) {
-            return error.ComputationOverflow;
-        }
-
-        const theta_power = std.math.pow(T, theta, power);
-        // Check for division by zero or overflow
-        if (theta_power == 0 or !std.math.isFinite(theta_power)) {
-            return error.NumericalInstability;
-        }
-
-        freqs.data[i] = 1.0 / theta_power; // Now matches Python's 1.0 / (theta ** x)
-
-        // Check for numerical stability
-        if (!std.math.isFinite(freqs.data[i])) {
-            return error.NumericalInstability;
-        }
-    }
-
-    // 2. Create time tensor [end, 1]
-    var time_range = try Tensor(T).init(allocator, &[_]usize{ end, 1 });
-    errdefer time_range.deinit();
-
-    for (0..end) |i| {
-        time_range.data[i] = @floatFromInt(i);
-    }
-
-    // 3. Reshape freqs and prepare for multiplication
-    try freqs.reshape(&[_]usize{ 1, dim / 2 });
-
-    // Initialize freq_matrix for the outer product
-    var freq_matrix = try Tensor(T).init(allocator, &[_]usize{ end, dim / 2 });
-    errdefer freq_matrix.deinit();
-
-    // Perform the outer product (t * freqs)
-    for (0..end) |i| {
-        for (0..dim / 2) |j| {
-            const product = time_range.data[i] * freqs.data[j];
-            if (!std.math.isFinite(product)) {
-                return error.NumericalInstability;
-            }
-            freq_matrix.data[i * (dim / 2) + j] = product;
-        }
-    }
-
-    // 4. Calculate exp(i * freqs) -> [cos(x), sin(x)]
-    var result = try Tensor(T).init(allocator, &[_]usize{ end, dim / 2, 2 });
-    errdefer result.deinit();
-
-    // Calculate cos and sin values (equivalent to exp(i*x) = cos(x) + i*sin(x))
-    for (0..end) |i| {
-        for (0..dim / 2) |j| {
-            const x = freq_matrix.data[i * (dim / 2) + j];
-            const cos_val = @cos(x);
-            const sin_val = @sin(x);
-
-            // Check for numerical stability
-            if (!std.math.isFinite(cos_val) or !std.math.isFinite(sin_val)) {
-                return error.NumericalInstability;
-            }
-
-            // Real part (cos)
-            result.data[i * (dim / 2) * 2 + j * 2] = cos_val;
-            // Imaginary part (sin)
-            result.data[i * (dim / 2) * 2 + j * 2 + 1] = sin_val;
-        }
-    }
-
-    // Cleanup intermediate tensors
-    freqs.deinit();
-    time_range.deinit();
-    freq_matrix.deinit();
-
-    return result;
-}
-
-const RotaryError = error{
-    InvalidDimension,
-    InvalidShape,
-    ShapeMismatch,
-    InvalidPositionIds,
-    DimensionMismatch, // Added for concat
-    IncompatibleShapes, // Added for concat
-} || FreqsError;
-
-/// Applies rotary position embeddings to the input tensor
-///
-/// Parameters:
-///   comptime T: The type of the tensor elements
-///   allocator: The allocator to use for memory allocations
-///   x: Input tensor of shape [num_heads, seq_len, head_dim]
-///   freqs_cis: Precomputed frequencies of shape [seq_len, rot_dim/2, 2]
-///   position_ids: Position indices of shape [seq_len]
-///   rot_dim: Dimension to rotate (must be <= head_dim)
-///   interleave: Whether complex numbers are stored in interleaved format
-///
-/// Returns:
-///   Tensor with rotary embeddings applied
-///
-/// Errors:
-///   error.InvalidInputDimensions: If the input tensor does not have 3 dimensions
-///   error.InvalidRotationDimension: If the rotation dimension does not match the expected size
-///
-/// Example:
-/// ```zig
-/// const allocator = std.heap.page_allocator;
-/// const x = Tensor(f32).init(allocator, &[_]usize{32, 13, 16});
-/// const freqs_cis = Tensor(f32).init(allocator, &[_]usize{13, 8, 2});
-/// const position_ids = Tensor(usize).init(allocator, &[_]usize{13});
-/// const result = try applyRotaryEmb(f32, allocator, x, freqs_cis, position_ids, 16, true);
-/// defer result.deinit();
-/// ```
-pub fn applyRotaryEmb(
-    comptime T: type,
-    allocator: Allocator,
-    x: Tensor(T),
-    freqs_cis: Tensor(T),
-    position_ids: Tensor(usize),
-    rot_dim: usize,
-    interleave: bool,
-) !Tensor(T) {
-    // Validate input constraints
-    if (x.shape.len != 3) {
-        return error.InvalidInputDimensions;
-    }
-    if (rot_dim != freqs_cis.shape[freqs_cis.shape.len - 2] * 2) {
-        return error.InvalidRotationDimension;
-    }
-
-    const n_heads = x.shape[0]; // 32
-    const seq_len = x.shape[1]; // 13
-    const head_dim = x.shape[2]; // 16
-
-    // Split x into rotation and pass-through parts
-    var x_rot = try x.getSliceRange(&[_]Slice{
-        Slice.full(), // Head (32)
-        Slice.full(), // Sequence (13)
-        Slice.from(0, rot_dim), // First rot_dim features
-    });
-    defer x_rot.deinit();
-
-    var x_pass = if (rot_dim < head_dim) blk: {
-        const pass = try x.getSliceRange(&[_]Slice{
-            Slice.full(), // Head (32)
-            Slice.full(), // Sequence (13)
-            Slice.from(rot_dim, null), // Remaining features
-        });
-        break :blk pass;
-    } else Tensor(T).init(allocator, &[_]usize{ n_heads, seq_len, 0 }) catch unreachable;
-    defer x_pass.deinit();
-
-    // x_rot and x_pass are correct!
-
-    // Handle interleaved vs non-interleaved cases
-    var xq_r: Tensor(T) = undefined;
-    var xq_i: Tensor(T) = undefined;
-
-    if (interleave) {
-        // Reshape x_rot to [n_heads, seq_len, rot_dim/2, 2]
-        var reshaped = try x_rot.copy();
-        defer reshaped.deinit();
-        try reshaped.reshape(&[_]usize{ n_heads, seq_len, rot_dim / 2, 2 });
-
-        // Extract real and imaginary parts (n_heads, seq_len, rot_dim/2)
-        xq_r = try reshaped.getSliceRange(&[_]Slice{
-            Slice.full(),
-            Slice.full(),
-            Slice.full(),
-            Slice.from(0, 1),
-        });
-        try xq_r.reshape(&[_]usize{ n_heads, seq_len, rot_dim / 2 });
-
-        xq_i = try reshaped.getSliceRange(&[_]Slice{
-            Slice.full(),
-            Slice.full(),
-            Slice.full(),
-            Slice.from(1, 2),
-        });
-        try xq_i.reshape(&[_]usize{ n_heads, seq_len, rot_dim / 2 });
-    } else {
-        // Split last dimension in half
-        xq_r = try x_rot.getSliceRange(&[_]Slice{
-            Slice.full(),
-            Slice.full(),
-            Slice.from(0, rot_dim / 2),
-        });
-        xq_i = try x_rot.getSliceRange(&[_]Slice{
-            Slice.full(),
-            Slice.full(),
-            Slice.from(rot_dim / 2, null),
-        });
-    }
-
-    // xq_r and xq_i are correct!
-    defer xq_r.deinit();
-    defer xq_i.deinit();
-
-    // Get cos and sin from freqs_cis
-    var cos_part = try freqs_cis.getSliceRange(&[_]Slice{
-        Slice.full(),
-        Slice.full(),
-        Slice.from(0, 1),
-    });
-    defer cos_part.deinit();
-
-    var sin_part = try freqs_cis.getSliceRange(&[_]Slice{
-        Slice.full(),
-        Slice.full(),
-        Slice.from(1, 2),
-    });
-    defer sin_part.deinit();
-
-    // Create freqs_cos and freqs_sin with shape (1, seq_len, rot_dim/2)
-    var freqs_cos = try zeros(T, allocator, &[_]usize{
-        1,
-        seq_len,
-        rot_dim / 2,
-    });
-    defer freqs_cos.deinit();
-
-    var freqs_sin = try zeros(T, allocator, &[_]usize{
-        1,
-        seq_len,
-        rot_dim / 2,
-    });
-    defer freqs_sin.deinit();
-
-    // Fill freqs_cos and freqs_sin using position_ids
-    for (0..seq_len) |i| {
-        const pos_id = position_ids.data[i];
-        const offset = i * (rot_dim / 2);
-        @memcpy(freqs_cos.data[offset .. offset + rot_dim / 2], cos_part.data[pos_id * cos_part.shape[1] .. (pos_id + 1) * cos_part.shape[1]]);
-        @memcpy(freqs_sin.data[offset .. offset + rot_dim / 2], sin_part.data[pos_id * sin_part.shape[1] .. (pos_id + 1) * sin_part.shape[1]]);
-    }
-
-    // freqs sin and cos are correct!
-
-    // Complex multiply with broadcasting across heads
-    // (a + bi)(c + di) = (ac - bd) + (ad + bc)i
-    var xq_out_r = try xq_r.copy(); // Will be (n_heads, seq_len, rot_dim/2)
-    defer xq_out_r.deinit();
-    try broadcast_multiply(T, &xq_out_r, freqs_cos);
-
-    var temp = try xq_i.copy();
-    defer temp.deinit();
-    try broadcast_multiply(T, &temp, freqs_sin);
-    try broadcast_subtract(T, &xq_out_r, temp);
-
-    var xq_out_i = try xq_r.copy(); // Will be (n_heads, seq_len, rot_dim/2)
-    defer xq_out_i.deinit();
-    try broadcast_multiply(T, &xq_out_i, freqs_sin);
-
-    var temp2 = try xq_i.copy();
-    defer temp2.deinit();
-    try broadcast_multiply(T, &temp2, freqs_cos);
-    try broadcast_add(T, &xq_out_i, temp2);
-
-    // xq_out_r amd xq_out_i are correct!
-
-    // Stack real and imaginary parts -> (n_heads, seq_len, rot_dim)
-    var tensors = [_]Tensor(T){ xq_out_r, xq_out_i };
-    var stacked = try stack(T, &tensors, 3);
-    defer stacked.deinit();
-
-    try flatten(f32, &stacked, 2, 3);
-
-    // stacked.print3D();
-
-    // std.debug.print("stacked shape (xq_out) {any} \n", .{stacked.shape});
-    // std.debug.print("x_pass shape {any} \n", .{x_pass.shape});
-
-    // Concatenate with pass-through
-    if (x_pass.data.len > 0) {
-        return concat(T, stacked, x_pass, 2);
-    } else {
-        return stacked.copy();
-    }
-}
-
-/// Create an attention mask for proper causal attention alignment.
-///
-/// This function generates a mask tensor of shape `[1, seq_len, pos + seq_len]`
-/// where the first `pos` elements in each row are set to `true`, and the remaining
-/// elements form a lower triangular matrix. This ensures that each position can
-/// only attend to previous positions and itself, which is essential for causal
-/// attention mechanisms in sequence models.
-///
-/// # Parameters
-/// - `allocator`: The allocator to use for memory allocation.
-/// - `pos`: The position offset for the mask.
-/// - `seq_len`: The length of the sequence.
-///
-/// # Returns
-/// - `Tensor(bool)`: A tensor of shape `[1, seq_len, pos + seq_len]` representing
-///   the attention mask.
-///
-/// # Errors
-/// - Returns an error if memory allocation fails.
-///
-/// # Example
-/// ```zig
-/// const allocator = std.heap.page_allocator;
-/// const mask = try createAttentionMask(allocator, 5, 10);
-/// defer mask.deinit();
-/// ```
-// Create attention mask for proper causal attention alignment
-pub fn createAttentionMask(allocator: Allocator, pos: usize, seq_len: usize) !Tensor(bool) {
-    // First create the base mask of shape [seq_len, pos + seq_len]
-    var mask = try Tensor(bool).init(allocator, &[_]usize{ seq_len, pos + seq_len });
-    errdefer mask.deinit();
-
-    // Fill the first part (before pos) with true
-    for (0..seq_len) |i| {
-        for (0..pos) |j| {
-            const idx = i * (pos + seq_len) + j;
-            mask.data[idx] = true;
-        }
-    }
-
-    // Fill the second part (pos onwards) with lower triangular matrix
-    for (0..seq_len) |i| {
-        for (0..seq_len) |j| {
-            const idx = i * (pos + seq_len) + (j + pos);
-            mask.data[idx] = j <= i; // Lower triangular
-        }
-    }
-
-    // Reshape to add head dimension [1, seq_len, pos + seq_len]
-    try mask.reshape(&[_]usize{ 1, seq_len, pos + seq_len });
-
-    return mask;
-}
-
-/// Scaled Dot Product Attention with mask
-///
-/// This function computes the scaled dot product attention for a given set of query, key, and value tensors,
-/// applying a mask to the attention scores. The attention mechanism is computed separately for each attention head.
-///
-/// Parameters:
-/// - `T`: The data type of the tensor elements (e.g., `f32` or `f64`).
-/// - `query`: The query tensor with shape `[n_heads, q_len, head_dim]`.
-/// - `key`: The key tensor with shape `[n_heads, kv_len, head_dim]`.
-/// - `value`: The value tensor with shape `[n_heads, kv_len, head_dim]`.
-/// - `mask`: The attention mask tensor with shape `[n_heads, q_len, kv_len]`, where `true` indicates valid positions and `false` indicates masked positions.
-/// - `allocator`: The allocator to use for memory allocations.
-///
-/// Returns:
-/// - A tensor of shape `[n_heads, q_len, head_dim]` containing the result of the scaled dot product attention.
-///
-/// Errors:
-/// - Returns an error if any memory allocation fails or if tensor operations fail.
-///
-/// Example:
-/// ```zig
-/// const T = f32;
-/// const query = try Tensor(T).init(allocator, &[_]usize{n_heads, q_len, head_dim});
-/// const key = try Tensor(T).init(allocator, &[_]usize{n_heads, kv_len, head_dim});
-/// const value = try Tensor(T).init(allocator, &[_]usize{n_heads, kv_len, head_dim});
-/// const mask = try Tensor(bool).init(allocator, &[_]usize{n_heads, q_len, kv_len});
-/// defer {
-///     query.deinit();
-///     key.deinit();
-///     value.deinit();
-///     mask.deinit();
-/// }
-/// const result = try scaledDotProductAttention(T, query, key, value, mask, allocator);
-/// defer result.deinit();
-/// ```
-// Scaled Dot Product Attention with mask
-pub fn scaledDotProductAttention(
-    comptime T: type,
-    query: Tensor(T),
-    key: Tensor(T),
-    value: Tensor(T),
-    mask: Tensor(bool),
-    allocator: Allocator,
-) !Tensor(T) {
-    const n_heads = query.shape[0];
-    const q_len = query.shape[1];
-    const kv_len = key.shape[1];
-    const head_dim = query.shape[2];
-
-    // Scale factor for attention scores
-    const scale: T = 1.0 / @sqrt(@as(T, @floatFromInt(head_dim)));
-
-    // Initialize output tensor
-    var out = try Tensor(T).init(allocator, &[_]usize{ n_heads, q_len, head_dim });
-    errdefer out.deinit();
-
-    // Prepare transposed key for all heads
-    var key_transpose = try key.copy();
-    defer key_transpose.deinit();
-    try transposeAxes(T, &key_transpose, 1, 2);
-
-    // Process each attention head separately
-    for (0..n_heads) |h| {
-        // Get the query, key, value slices for this head
-        var query_head = try query.getDimensionSlice(0, h);
-        defer query_head.deinit();
-
-        var key_head = try key_transpose.getDimensionSlice(0, h);
-        defer key_head.deinit();
-
-        var value_head = try value.getDimensionSlice(0, h);
-        defer value_head.deinit();
-
-        // Calculate attention scores for this head
-        var attn_weights_flat = try simdmatmul.matmul(T, query_head, key_head, allocator);
-        defer attn_weights_flat.deinit();
-
-        // Apply scaling factor
-        scalarMultiply(T, &attn_weights_flat, scale);
-
-        // Apply attention mask - fixed version with proper 2D indexing
-        // The mask has shape [seq_len, pos + seq_len] where pos is the current position
-        for (0..q_len) |q| {
-            for (0..kv_len) |k| {
-                // Direct 2D indexing into the mask
-                const mask_index = q * (mask.shape[2]) + k;
-                const flat_index = q * kv_len + k;
-
-                // Apply negative infinity masking where mask is false
-                if (!mask.data[mask_index]) {
-                    attn_weights_flat.data[flat_index] = -std.math.inf(T);
-                }
-            }
-        }
-
-        // Apply softmax to get attention probabilities
-        try softmax(T, &attn_weights_flat, 1);
-
-        // Calculate weighted sum with values
-        var out_flat = try simdmatmul.matmul(T, attn_weights_flat, value_head, allocator);
-        defer out_flat.deinit();
-
-        // Copy results to output tensor for this head
-        for (0..q_len) |q| {
-            for (0..head_dim) |d| {
-                const out_idx = h * q_len * head_dim + q * head_dim + d;
-                const flat_idx = q * head_dim + d;
-                out.data[out_idx] = out_flat.data[flat_idx];
-            }
-        }
-    }
-
-    return out;
-}
 
 // Softmax operation along specified dimension
 fn softmax(comptime T: type, tensor: *Tensor(T), dim: usize) !void {

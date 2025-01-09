@@ -3,6 +3,7 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const max_items_per_row = 6; // Number of elements to show per row
 const max_rows = 8; // Maximum number of rows to show before truncating
+const helper = @import("helper.zig");
 
 pub fn Tensor(comptime DataType: type) type {
     return struct {
@@ -202,6 +203,58 @@ pub fn Tensor(comptime DataType: type) type {
             self.shape = new_shape;
         }
 
+        /// Flattens a specified range of dimensions in the tensor in-place.
+        ///
+        /// This function modifies the tensor's shape by flattening dimensions from
+        /// start_dim to end_dim (inclusive) into a single dimension. Dimensions
+        /// before start_dim and after end_dim remain unchanged.
+        ///
+        /// Parameters:
+        /// - start_dim: Starting dimension to flatten (can be negative to count from end)
+        /// - end_dim: Ending dimension to flatten (can be negative to count from end)
+        ///
+        /// Returns: void
+        ///
+        /// Errors:
+        /// - InvalidDimension: If start_dim or end_dim are out of bounds
+        /// - InvalidDimRange: If start_dim > end_dim
+        pub fn flatten(self: *Self, start_dim: isize, end_dim: isize) !void {
+            const positive_start = try helper.normalizeDim(start_dim, self.shape.len);
+            const positive_end = try helper.normalizeDim(end_dim, self.shape.len);
+
+            if (positive_start > positive_end) {
+                return error.InvalidDimRange;
+            }
+
+            // Calculate the size of the flattened dimension
+            var flat_size: usize = 1;
+            for (positive_start..positive_end + 1) |i| {
+                flat_size *= self.shape[i];
+            }
+
+            // Create new shape
+            const new_shape_len = self.shape.len - (positive_end - positive_start);
+            var new_shape = try self.allocator.alloc(usize, new_shape_len);
+            errdefer self.allocator.free(new_shape);
+
+            // Copy dimensions before flattened dimensions
+            @memcpy(new_shape[0..positive_start], self.shape[0..positive_start]);
+
+            // Add flattened dimension
+            new_shape[positive_start] = flat_size;
+
+            // Copy dimensions after flattened dimensions
+            if (positive_end + 1 < self.shape.len) {
+                @memcpy(
+                    new_shape[positive_start + 1 ..],
+                    self.shape[positive_end + 1 ..],
+                );
+            }
+
+            // Free old shape and update with new shape
+            self.allocator.free(self.shape);
+            self.shape = new_shape;
+        }
         pub fn getDimensionSlice(self: Self, dim: usize, index: usize) !Self {
             // Verify dimension is valid
             if (dim >= self.shape.len) {
