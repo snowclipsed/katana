@@ -6,12 +6,13 @@ pub fn build(b: *std.Build) void {
         .preferred_optimize_mode = .ReleaseSafe,
     });
 
-    // Create the module - this is needed for dependency usage
+    // Create the module
     _ = b.addModule("tensor", .{
         .root_source_file = .{ .cwd_relative = "src/tensor.zig" },
+        .imports = &.{},
     });
 
-    // Create library artifact with ReleaseSafe
+    // Create library artifact
     const lib = b.addStaticLibrary(.{
         .name = "tensor",
         .root_source_file = .{ .cwd_relative = "src/tensor.zig" },
@@ -19,12 +20,11 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    // Install the library
     b.installArtifact(lib);
 
-    // Add tests with ReleaseSafe
+    // Add tests
     const main_tests = b.addTest(.{
-        .root_source_file = .{ .cwd_relative = "src/ops_tests.zig" },
+        .root_source_file = .{ .cwd_relative = "src/tests.zig" },
         .target = target,
         .optimize = optimize,
     });

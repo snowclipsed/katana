@@ -3,10 +3,10 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const max_items_per_row = 6; // Number of elements to show per row
 const max_rows = 8; // Maximum number of rows to show before truncating
-const Tensor = @import("tensor.zig").Tensor;
-const StabilityError = @import("tensor.zig").StabilityError;
-const simdmatmul = @import("matmul.zig");
-const Slice = @import("tensor.zig").Slice;
+const tensormod = @import("tensor.zig");
+const Tensor = tensormod.Tensor;
+const StabilityError = tensormod.StabilityError;
+const Slice = tensormod.Slice;
 const testing = std.testing;
 const expectEqual = testing.expectEqual;
 const expectError = testing.expectError;
@@ -213,9 +213,9 @@ pub fn transposeAxes(comptime T: type, tensor: *Tensor(T), dim0: usize, dim1: us
 /// - The function performs an in-place modification of the `tensor`.
 pub fn accumulate(comptime T: type, tensor: *Tensor(T), other: Tensor(T)) !void {
     if (!std.mem.eql(usize, tensor.shape, other.shape)) {
-        std.log.err("tensor shape: {d}\n", .{tensor.shape});
-        std.log.err("other shape: {d}\n", .{other.shape});
-        std.log.err("Error during accumulation \n", .{});
+        // std.log.err("tensor shape: {d}\n", .{tensor.shape});
+        // std.log.err("other shape: {d}\n", .{other.shape});
+        // std.log.err("Error during accumulation \n", .{});
         return error.ShapeMismatch;
     }
 
@@ -527,8 +527,8 @@ fn verifyCompatibleForConcat(comptime T: type, tensor: Tensor(T), other: Tensor(
     // Check if all dimensions except concat dim are equal
     for (tensor.shape, 0..) |s, i| {
         if (i != dim and s != other.shape[i]) {
-            std.log.err("tensor shape: {d}\n", .{tensor.shape});
-            std.log.err("other shape: {d}\n", .{other.shape});
+            // std.log.err("tensor shape: {d}\n", .{tensor.shape});
+            // std.log.err("other shape: {d}\n", .{other.shape});
             return error.IncompatibleShapes;
         }
     }
@@ -573,7 +573,7 @@ pub fn stack(comptime T: type, tensors: []const Tensor(T), dim: usize) !Tensor(T
     // Validate all tensors have the same shape
     for (tensors[1..]) |tensor| {
         if (!std.mem.eql(usize, tensor.shape, ref_shape)) {
-            std.log.err("Error during stacking \n", .{});
+            // std.log.err("Error during stacking \n", .{});
             return error.ShapeMismatch;
         }
     }
@@ -1072,9 +1072,9 @@ pub fn replaceUnstable(comptime T: type, tensor: *Tensor(T), replacement: T) !vo
 /// - The function assumes that the `tensor` and `other` have the same shape and does not perform any broadcasting.
 pub fn add(comptime T: type, tensor: *Tensor(T), other: Tensor(T)) !void {
     if (!std.mem.eql(usize, tensor.shape, other.shape)) {
-        std.log.err("tensor shape: {d}\n", .{tensor.shape});
-        std.log.err("other shape: {d}\n", .{other.shape});
-        std.log.err("Error during addition \n", .{});
+        // std.log.err("tensor shape: {d}\n", .{tensor.shape});
+        // std.log.err("other shape: {d}\n", .{other.shape});
+        // std.log.err("Error during addition \n", .{});
         return error.ShapeMismatch;
     }
 
@@ -1110,9 +1110,9 @@ pub fn add(comptime T: type, tensor: *Tensor(T), other: Tensor(T)) !void {
 /// ```
 pub fn subtract(comptime T: type, tensor: *Tensor(T), other: Tensor(T)) !void {
     if (!std.mem.eql(usize, tensor.shape, other.shape)) {
-        std.log.err("tensor shape: {d}\n", .{tensor.shape});
-        std.log.err("other shape: {d}\n", .{other.shape});
-        std.log.err("Error during subtraction \n", .{});
+        // std.log.err("tensor shape: {d}\n", .{tensor.shape});
+        // std.log.err("other shape: {d}\n", .{other.shape});
+        // std.log.err("Error during subtraction \n", .{});
         return error.ShapeMismatch;
     }
 
@@ -1149,9 +1149,9 @@ pub fn subtract(comptime T: type, tensor: *Tensor(T), other: Tensor(T)) !void {
 /// ```
 pub fn multiply(comptime T: type, tensor: *Tensor(T), other: Tensor(T)) !void {
     if (!std.mem.eql(usize, tensor.shape, other.shape)) {
-        std.log.err("tensor shape: {d}\n", .{tensor.shape});
-        std.log.err("other shape: {d}\n", .{other.shape});
-        std.log.err("Error during multiplication \n", .{});
+        // std.log.err("tensor shape: {d}\n", .{tensor.shape});
+        // std.log.err("other shape: {d}\n", .{other.shape});
+        // std.log.err("Error during multiplication \n", .{});
         return error.ShapeMismatch;
     }
 
