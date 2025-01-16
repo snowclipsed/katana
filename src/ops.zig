@@ -1,8 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
-const max_items_per_row = 6; // Number of elements to show per row
-const max_rows = 8; // Maximum number of rows to show before truncating
 const tensormod = @import("tensor.zig");
 const Tensor = tensormod.Tensor;
 const StabilityError = tensormod.StabilityError;
@@ -10,6 +8,14 @@ const Slice = tensormod.Slice;
 const testing = std.testing;
 const expectEqual = testing.expectEqual;
 const expectError = testing.expectError;
+
+// --- Constants ---
+const max_items_per_row = 6; // Number of elements to show per row
+const max_rows = 8; // Maximum number of rows to show before truncating
+
+// SIMD Tuning parameters
+pub const Tile: usize = 64; // Tile size
+pub const Vec: usize = 32; // Vector size
 
 //--------------------------------- Transformation Operations ---------------------------------
 
@@ -1386,51 +1392,214 @@ pub fn broadcast_subtract(comptime T: type, a: *Tensor(T), b: Tensor(T)) !void {
     @memcpy(a.data, result.data);
 }
 
-/// Multiplies two 2D tensors (matrices) and returns the resulting tensor.
-///
-/// This function performs matrix multiplication on two input tensors. The input tensors must be 2-dimensional
-/// and their inner dimensions must be compatible for matrix multiplication (i.e., the number of columns in the
-/// first tensor must equal the number of rows in the second tensor).
-///
-/// - Parameters:
-///   - T: The element type of the tensors.
-///   - tensor: A pointer to the first tensor (left operand) of type `Tensor(T)`.
-///   - other: The second tensor (right operand) of type `Tensor(T)`.
-///
-/// - Returns: A new tensor of type `Tensor(T)` containing the result of the matrix multiplication.
-///
-/// - Errors:
-///   - `UnsupportedDimension`: If either of the input tensors is not 2-dimensional.
-///   - `IncompatibleDimensions`: If the inner dimensions of the input tensors are not compatible for matrix multiplication.
-///
-/// - Example:
-/// ```zig
-/// const result = try matmul(f32, &tensorA, tensorB);
-/// ```
-///
-/// - Note: The function assumes that the input tensors are properly initialized and allocated.
-pub fn matmul(comptime T: type, tensor: *Tensor(T), other: Tensor(T)) !Tensor(T) {
-    if (tensor.shape.len != 2 or other.shape.len != 2) {
-        return error.UnsupportedDimension;
-    }
-    if (tensor.shape[1] != other.shape[0]) {
-        return error.IncompatibleDimensions;
-    }
+const WorkItem = struct {
+    i: usize,
+    j: usize,
+};
 
-    const m = tensor.shape[0];
-    const k = tensor.shape[1];
-    const n = other.shape[1];
+const ThreadContext = struct {
+    a: []const f32,
+    b: []const f32,
+    c: []f32,
+    M: usize,
+    N: usize,
+    K: usize,
+    work_queue: *ArrayList(WorkItem),
+    mutex: std.Thread.Mutex,
+};
 
-    var result = try Tensor(@TypeOf(tensor.data[0])).init(tensor.allocator, &[_]usize{ m, n });
+fn tiledMultiplyKernel(
+    A: []const f32,
+    B: []const f32,
+    local_C: *[Tile][Tile]f32,
+    N: usize,
+    K: usize,
+    i_start: usize,
+    j_start: usize,
+    k_start: usize,
+    i_end: usize,
+    j_end: usize,
+    k_end: usize,
+) void {
+    var A_local: [Tile][Tile]f32 = undefined;
+    var B_local: [Tile][Tile]f32 = undefined;
 
-    for (0..m) |i| {
-        for (0..n) |j| {
-            var sum: @TypeOf(tensor.data[0]) = 0;
-            for (0..k) |l| {
-                sum += tensor.data[i * k + l] * other.data[l * n + j];
+    // Load A and B into local buffers
+    for (0..Tile) |i| {
+        for (0..Tile) |k| {
+            if (i_start + i < i_end and k_start + k < k_end) {
+                A_local[i][k] = A[(i_start + i) * K + (k_start + k)];
+            } else {
+                A_local[i][k] = 0;
             }
-            result.data[i * n + j] = sum;
         }
+    }
+
+    for (0..Tile) |k| {
+        for (0..Tile) |j| {
+            if (k_start + k < k_end and j_start + j < j_end) {
+                B_local[k][j] = B[(k_start + k) * N + (j_start + j)];
+            } else {
+                B_local[k][j] = 0;
+            }
+        }
+    }
+
+    // Compute tile with vectorization
+    var i: usize = 0;
+    while (i < Tile) : (i += 1) {
+        var j: usize = 0;
+        while (j < Tile) : (j += Vec) {
+            var vec_sum: @Vector(Vec, f32) = @splat(0);
+            var k: usize = 0;
+            while (k < Tile) : (k += 1) {
+                const a_val = A_local[i][k];
+                const a_vec = @as(@Vector(Vec, f32), @splat(a_val));
+                const b_vec = blk: {
+                    var temp: @Vector(Vec, f32) = undefined;
+                    for (0..Vec) |idx| {
+                        temp[idx] = B_local[k][j + idx];
+                    }
+                    break :blk temp;
+                };
+                vec_sum += a_vec * b_vec;
+            }
+
+            // Store results in local buffer
+            for (0..Vec) |idx| {
+                local_C[i][j + idx] += vec_sum[idx];
+            }
+        }
+    }
+}
+
+fn workerThread(context: *ThreadContext) void {
+    while (true) {
+        // Get next work item
+        context.mutex.lock();
+        const work_item = if (context.work_queue.popOrNull()) |item| item else {
+            context.mutex.unlock();
+            break;
+        };
+        context.mutex.unlock();
+
+        // Process tile
+        const i_start = work_item.i * Tile;
+        const j_start = work_item.j * Tile;
+        const i_end = @min(i_start + Tile, context.M);
+        const j_end = @min(j_start + Tile, context.N);
+
+        var local_C: [Tile][Tile]f32 = [_][Tile]f32{[_]f32{0} ** Tile} ** Tile;
+
+        var k: usize = 0;
+        while (k < context.K) : (k += Tile) {
+            const k_end = @min(k + Tile, context.K);
+            tiledMultiplyKernel(
+                context.a,
+                context.b,
+                &local_C,
+                context.N,
+                context.K,
+                i_start,
+                j_start,
+                k,
+                i_end,
+                j_end,
+                k_end,
+            );
+        }
+
+        // Accumulate results to global C
+        for (i_start..i_end) |i| {
+            for (j_start..j_end) |j| {
+                context.c[i * context.N + j] += local_C[i - i_start][j - j_start];
+            }
+        }
+    }
+}
+
+/// Multiplies two matrices and returns the result.
+///
+/// This function takes two 2D arrays (matrices) as input and performs
+/// matrix multiplication. The number of columns in the first matrix
+/// must be equal to the number of rows in the second matrix.
+///
+/// Parameters:
+/// - `matrix1`: The first matrix (2D array) to be multiplied.
+/// - `matrix2`: The second matrix (2D array) to be multiplied.
+///
+/// Returns:
+/// - A new matrix (2D array) that is the result of multiplying `matrix1` by `matrix2`.
+///
+/// Throws:
+/// - An error if the number of columns in `matrix1` does not match the number of rows in `matrix2`.
+///
+/// Example:
+/// ```zig
+/// const matrix1 = [[1, 2, 3], [4, 5, 6]];
+/// const matrix2 = [[7, 8], [9, 10], [11, 12]];
+/// const result = matmul(matrix1, matrix2);
+/// // result is [[58, 64], [139, 154]]
+pub fn matmul(comptime DataType: type, a: Tensor(DataType), b: Tensor(DataType), allocator: Allocator) !Tensor(DataType) {
+    if (a.shape.len != 2 or b.shape.len != 2) {
+        return error.InvalidDimensions;
+    }
+    if (a.shape[1] != b.shape[0]) {
+        return error.ShapeMismatch;
+    }
+
+    const M = a.shape[0];
+    const N = b.shape[1];
+    const K = a.shape[1];
+
+    const result_shape = [_]usize{ M, N };
+    var result = try Tensor(DataType).init(allocator, &result_shape);
+    errdefer result.deinit();
+
+    // Calculate number of tiles and create work items
+    const tiles_M = (M + Tile - 1) / Tile;
+    const tiles_N = (N + Tile - 1) / Tile;
+
+    // Initialize work queue
+    var work_queue = ArrayList(WorkItem).init(allocator);
+    defer work_queue.deinit();
+
+    // Populate work queue
+    for (0..tiles_M) |i| {
+        for (0..tiles_N) |j| {
+            try work_queue.append(.{ .i = i, .j = j });
+        }
+    }
+
+    // Shuffle work queue for better load balancing
+    var rng = std.rand.DefaultPrng.init(@intCast(std.time.milliTimestamp()));
+    rng.random().shuffle(WorkItem, work_queue.items);
+
+    // Initialize thread pool
+    const thread_count = try std.Thread.getCpuCount();
+    var thread_pool = try ArrayList(std.Thread).initCapacity(allocator, thread_count);
+    defer thread_pool.deinit();
+
+    // Create thread context
+    var context = ThreadContext{
+        .a = a.getSlice(),
+        .b = b.getSlice(),
+        .c = result.getSlice(),
+        .M = M,
+        .N = N,
+        .K = K,
+        .work_queue = &work_queue,
+        .mutex = std.Thread.Mutex{},
+    };
+
+    // Spawn worker threads
+    for (0..thread_count) |_| {
+        try thread_pool.append(try std.Thread.spawn(.{}, workerThread, .{&context}));
+    }
+
+    // Wait for all threads to complete
+    for (thread_pool.items) |thread| {
+        thread.join();
     }
 
     return result;
