@@ -1,0 +1,32 @@
+name: Zig Tests
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  # Allow manual trigger from GitHub UI
+  workflow_dispatch:
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Zig
+      uses: goto-bus-stop/setup-zig@v2
+      with:
+        version: master  # You can specify a version like "0.11.0" if needed
+    
+    - name: Build and Test
+      run: |
+        zig build test
+      
+    - name: Run Benchmarks
+      run: |
+        zig build bench
