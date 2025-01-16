@@ -4,13 +4,9 @@
 
     .minimum_zig_version = "0.13.0",
 
-    .dependencies = .{
-        // Add any dependencies here if needed
-    },
-
     .paths = .{
         // Include all source files
-        "src/",
+        "src",
         // Include build files
         "build.zig",
         "build.zig.zon",
