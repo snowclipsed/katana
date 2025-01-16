@@ -774,7 +774,3 @@ pub const Slice = struct {
         return .{ .start = start, .end = end };
     }
 };
-
-pub usingnamespace @import("ops.zig");
-
-pub usingnamespace @import("matmul.zig");

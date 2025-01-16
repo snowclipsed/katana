@@ -133,7 +133,7 @@ test "tensor matrix multiplication" {
     defer tensor2.deinit();
     tensor2.fill(3.0);
 
-    var result = try ops.matmul(f32, &tensor1, tensor2);
+    var result = try ops.matmul(f32, tensor1, tensor2, allocator);
     defer result.deinit();
 
     try testing.expectEqual(@as(usize, 2), result.shape[0]);
@@ -2538,6 +2538,33 @@ test "matmul error cases" {
     }
 }
 
+fn naivematmul(comptime T: type, tensor: *Tensor(T), other: Tensor(T)) !Tensor(T) {
+    if (tensor.shape.len != 2 or other.shape.len != 2) {
+        return error.UnsupportedDimension;
+    }
+    if (tensor.shape[1] != other.shape[0]) {
+        return error.IncompatibleDimensions;
+    }
+
+    const m = tensor.shape[0];
+    const k = tensor.shape[1];
+    const n = other.shape[1];
+
+    var result = try Tensor(@TypeOf(tensor.data[0])).init(tensor.allocator, &[_]usize{ m, n });
+
+    for (0..m) |i| {
+        for (0..n) |j| {
+            var sum: @TypeOf(tensor.data[0]) = 0;
+            for (0..k) |l| {
+                sum += tensor.data[i * k + l] * other.data[l * n + j];
+            }
+            result.data[i * n + j] = sum;
+        }
+    }
+
+    return result;
+}
+
 test "matmul correctness against reference" {
     const allocator = testing.allocator;
     const T = 64;
@@ -2568,7 +2595,7 @@ test "matmul correctness against reference" {
         defer result.deinit();
 
         // Compute using reference matmul
-        var expected = try ops.matmul(f32, &a, b);
+        var expected = try naivematmul(f32, &a, b);
         defer expected.deinit();
 
         // Compare results
