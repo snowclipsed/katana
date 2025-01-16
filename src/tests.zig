@@ -5,7 +5,6 @@ const max_items_per_row = 6; // Number of elements to show per row
 const max_rows = 8; // Maximum number of rows to show before truncating
 const tensormod = @import("tensor.zig");
 const ops = @import("ops.zig");
-const mm = @import("matmul.zig");
 const Tensor = tensormod.Tensor;
 const Slice = tensormod.Slice;
 const StabilityError = tensormod.StabilityError;
@@ -2443,7 +2442,7 @@ test "matmul basic functionality" {
         b.data[2] = 7.0;
         b.data[3] = 8.0;
 
-        var result = try mm.matmul(f32, a, b, allocator);
+        var result = try ops.matmul(f32, a, b, allocator);
         defer result.deinit();
 
         // Compare with known result
@@ -2467,7 +2466,7 @@ test "matmul edge cases" {
         a.data[0] = 3.0;
         b.data[0] = 4.0;
 
-        var result = try mm.matmul(f32, a, b, allocator);
+        var result = try ops.matmul(f32, a, b, allocator);
         defer result.deinit();
 
         try testing.expectApproxEqAbs(result.data[0], 12.0, 1e-6);
@@ -2488,7 +2487,7 @@ test "matmul edge cases" {
         b.data[1] = 5.0;
         b.data[2] = 6.0;
 
-        var result = try mm.matmul(f32, a, b, allocator);
+        var result = try ops.matmul(f32, a, b, allocator);
         defer result.deinit();
 
         try testing.expectEqual(result.shape[0], @as(usize, 3));
@@ -2505,7 +2504,7 @@ test "matmul edge cases" {
         @memset(a.data, 0);
         @memset(b.data, 0);
 
-        var result = try mm.matmul(f32, a, b, allocator);
+        var result = try ops.matmul(f32, a, b, allocator);
         defer result.deinit();
 
         for (result.data) |val| {
@@ -2524,7 +2523,7 @@ test "matmul error cases" {
         var b = try Tensor(f32).init(allocator, &[_]usize{ 2, 2 });
         defer b.deinit();
 
-        try testing.expectError(error.ShapeMismatch, mm.matmul(f32, a, b, allocator));
+        try testing.expectError(error.ShapeMismatch, ops.matmul(f32, a, b, allocator));
     }
 
     // Test case 2: Invalid dimensions
@@ -2534,7 +2533,7 @@ test "matmul error cases" {
         var b = try Tensor(f32).init(allocator, &[_]usize{ 2, 2 });
         defer b.deinit();
 
-        try testing.expectError(error.InvalidDimensions, mm.matmul(f32, a, b, allocator));
+        try testing.expectError(error.InvalidDimensions, ops.matmul(f32, a, b, allocator));
     }
 }
 
@@ -2591,7 +2590,7 @@ test "matmul correctness against reference" {
         defer b.deinit();
 
         // Compute using tiled matmul
-        var result = try mm.matmul(f32, a, b, allocator);
+        var result = try ops.matmul(f32, a, b, allocator);
         defer result.deinit();
 
         // Compute using reference matmul
@@ -2623,7 +2622,7 @@ test "matmul numerical stability" {
         @memset(a.data, large);
         @memset(b.data, large);
 
-        var result = try mm.matmul(f32, a, b, allocator);
+        var result = try ops.matmul(f32, a, b, allocator);
         defer result.deinit();
 
         // Check results
@@ -2647,7 +2646,7 @@ test "matmul numerical stability" {
         @memset(a.data, small);
         @memset(b.data, small);
 
-        var result = try mm.matmul(f32, a, b, allocator);
+        var result = try ops.matmul(f32, a, b, allocator);
         defer result.deinit();
 
         // Check results
@@ -2677,7 +2676,7 @@ test "matmul numerical stability" {
         b.data[2] = 1e-3;
         b.data[3] = 1e3;
 
-        var result = try mm.matmul(f32, a, b, allocator);
+        var result = try ops.matmul(f32, a, b, allocator);
         defer result.deinit();
 
         // Check results
