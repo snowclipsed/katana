@@ -11,6 +11,17 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // Documentation
+    const docs = b.addSystemCommand(&[_][]const u8{
+        "zig",
+        "test",
+        "-femit-docs",
+        b.pathFromRoot("src/root.zig"),
+    });
+
+    const docs_step = b.step("docs", "Generate documentation");
+    docs_step.dependOn(&docs.step);
+
     // Tests
     const tests = b.addTest(.{
         .root_source_file = b.path("src/tests.zig"),
