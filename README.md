@@ -138,3 +138,13 @@ limitations under the License.
 ## Contributing
 
 We welcome contributions to Tensor-Zig! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details on how to submit changes, coding standards, testing requirements, and more.
+
+
+---
+
+## TODO
+✅ Add flatten to tensor intrinsic
+- Documentation Page
+- SIMD Ops (soon!)
+- Write usage guide
+- Write more extensive testing suite for ML ops
