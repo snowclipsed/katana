@@ -1,3 +1,11 @@
+//! Tensor-Zig is a tensor computation library providing efficient tensor manipulations
+//! and matrix operations.
+//!
+//! Example:
+//! ```zig
+//! const tensor = @import("tensor");
+//! var t = try tensor.zeros(f32, &[_]usize{2, 2});
+//! ```
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
@@ -442,7 +450,18 @@ pub fn Tensor(comptime DataType: type) type {
             return result;
         }
 
-        // Calculate index in flattened array from n-dimensional coordinates
+        /// Calculates the index based on the given parameters.
+        ///
+        /// This function takes two parameters, `base` and `offset`, and returns the
+        /// calculated index by adding the offset to the base. It is useful for
+        /// determining the position within an array or list.
+        ///
+        /// Parameters:
+        /// - `base`: The starting index or base value.
+        /// - `offset`: The offset to be added to the base value.
+        ///
+        /// Returns:
+        /// - The calculated index as an integer.
         pub fn calculateIndex(shape: []const usize, coords: []const usize) usize {
             var index: usize = 0;
             var stride: usize = 1;
@@ -456,12 +475,32 @@ pub fn Tensor(comptime DataType: type) type {
         }
 
         // Utility functions
+
+        /// Fills the tensor with the specified value.
+        ///
+        /// This function iterates over all elements of the tensor and sets each one to the given value.
+        ///
+        /// Parameters:
+        /// - `self`: A pointer to the tensor instance.
+        /// - `value`: The value to fill the tensor with.
         pub fn fill(self: *Self, value: DataType) void {
             for (self.data, 0..) |_, i| {
                 self.data[i] = value;
             }
         }
 
+        /// Copies the current tensor and returns a new tensor with the same data.
+        ///
+        /// This function creates a deep copy of the tensor, meaning that all elements
+        /// of the tensor are duplicated in the new tensor. This is useful when you
+        /// need to create a separate instance of the tensor that can be modified
+        /// independently of the original tensor.
+        ///
+        /// Returns:
+        /// - A new tensor that is a copy of the current tensor.
+        ///
+        /// Throws:
+        /// - An error if the tensor cannot be copied for some reason.
         pub fn copy(self: Self) !Self {
             const new_tensor = try Self.init(self.allocator, self.shape);
             @memcpy(new_tensor.data, self.data);
@@ -503,7 +542,18 @@ pub fn Tensor(comptime DataType: type) type {
             }
         }
 
-        /// Calculate strides for each dimension
+        /// Calculates the strides for a given tensor shape.
+        ///
+        /// Strides are used to efficiently index into a multi-dimensional array.
+        /// This function computes the strides based on the provided shape of the tensor.
+        ///
+        /// - Parameters:
+        ///   - shape: A slice of `usize` representing the dimensions of the tensor.
+        ///   - allocator: The allocator to use for allocating the strides array.
+        ///
+        /// - Returns: A slice of `usize` representing the strides for each dimension of the tensor.
+        ///
+        /// - Throws: An error if memory allocation for the strides array fails.
         fn calculateStrides(shape: []const usize, allocator: Allocator) ![]usize {
             var strides = try allocator.alloc(usize, shape.len);
             errdefer allocator.free(strides);
@@ -577,11 +627,24 @@ pub fn Tensor(comptime DataType: type) type {
             try self.formatTensor(writer);
         }
 
-        /// Print the tensor to stdout
         pub fn print(self: Self) void {
             std.debug.print("{}", .{self});
         }
-        /// Print a 2D tensor to stdout with truncated rows if necessary
+
+        /// Prints the 2D representation of the tensor to the standard output.
+        ///
+        /// This function iterates over the elements of the 2D tensor and prints
+        /// them in a formatted manner, making it easier to visualize the tensor's
+        /// structure and values.
+        ///
+        /// Usage:
+        /// ```zig
+        /// var tensor = Tensor.init2D(...);
+        /// tensor.print2D();
+        /// ```
+        ///
+        /// Note: This function assumes that the tensor is 2D and may not work
+        /// correctly for tensors of other dimensions.
         pub fn print2D(self: Self) void {
             if (self.shape.len != 2) {
                 std.debug.print("Error: Not a 2D tensor\n", .{});
@@ -629,6 +692,19 @@ pub fn Tensor(comptime DataType: type) type {
         }
 
         /// Print a 3D tensor to stdout with truncated rows and slices if necessary
+        /// Prints the 3D representation of the tensor.
+        ///
+        /// This function outputs the tensor's elements in a 3D format, making it easier
+        /// to visualize the structure and values of the tensor.
+        ///
+        /// Usage:
+        /// ```zig
+        /// const tensor = Tensor.init(...);
+        /// tensor.print3D();
+        /// ```
+        ///
+        /// Note: Ensure that the tensor is properly initialized and contains valid data
+        /// before calling this function.
         pub fn print3D(self: Self) void {
             if (self.shape.len != 3) {
                 std.debug.print("Error: Not a 3D tensor\n", .{});
@@ -726,7 +802,18 @@ pub fn Tensor(comptime DataType: type) type {
             }
         }
 
-        /// Convert tensor to string
+        /// Converts the tensor to a string representation.
+        ///
+        /// This function takes an allocator to allocate memory for the string representation
+        /// of the tensor. The caller is responsible for freeing the allocated memory.
+        ///
+        /// Parameters:
+        /// - `self`: The tensor instance to convert to a string.
+        /// - `allocator`: The allocator to use for allocating memory for the string.
+        ///
+        /// Returns:
+        /// - `![]const u8`: The string representation of the tensor, or an error if the
+        ///   conversion fails.
         pub fn toString(self: Self, allocator: std.mem.Allocator) ![]const u8 {
             var list = std.ArrayList(u8).init(allocator);
             errdefer list.deinit();
