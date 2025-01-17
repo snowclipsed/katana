@@ -54,11 +54,13 @@ jobs:
     - name: Generate Documentation
       run: |
         zig build docs
-    
+        ls -la  # List all files
+        find . -name "*.html"  # Find any HTML files
+
     - name: Deploy to GitHub Pages
       uses: peaceiris/actions-gh-pages@v3
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
-        publish_dir: ./docs
+        publish_dir: .  # Change this to root directory since docs are generated here
         force_orphan: true
         commit_message: "docs: update documentation"
