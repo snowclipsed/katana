@@ -32,11 +32,11 @@ jobs:
         zig build bench
 
   docs:
-    needs: test  # Only build docs after tests pass
-    if: github.ref == 'refs/heads/main'  # Only deploy docs from main branch
+    needs: test
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # Needed for pushing to gh-pages branch
+      contents: write
     
     steps:
     - uses: actions/checkout@v4
@@ -45,6 +45,11 @@ jobs:
       uses: goto-bus-stop/setup-zig@v2
       with:
         version: 0.13.0
+    
+    - name: Setup Zig cache directory
+      run: |
+        mkdir -p ~/.cache/zig
+        chmod 777 ~/.cache/zig
     
     - name: Generate Documentation
       run: |
@@ -55,5 +60,5 @@ jobs:
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         publish_dir: ./docs
-        force_orphan: true  # Keep gh-pages branch clean
+        force_orphan: true
         commit_message: "docs: update documentation"
