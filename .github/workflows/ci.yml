@@ -45,37 +45,22 @@ jobs:
       with:
         version: 0.13.0
     
-    - name: Setup Zig cache directory
+    - name: Setup Cache Directories
       run: |
         mkdir -p ~/.cache/zig
-        chmod 777 ~/.cache/zig
-    
+        sudo chown -R $(id -u):$(id -g) ~/.cache/zig
+        sudo chmod -R 755 ~/.cache/zig
+        
     - name: Generate Documentation
       run: |
         echo "Starting documentation generation..."
-        zig build docs
-        
-        echo "Current directory contents:"
-        ls -la
-        
-        echo "Searching for generated documentation:"
-        find . -type f -name "*.html" || echo "No HTML files found"
-        find . -type d -name "docs" || echo "No docs directory found"
-        
-        # Create docs directory if it doesn't exist
         mkdir -p docs
-        
-        # If docs were generated in root, move them to docs directory
+        zig test -femit-docs src/root.zig --dep std
         mv *.html docs/ 2>/dev/null || echo "No HTML files to move"
         
-        echo "Final docs directory contents:"
+        echo "Documentation files:"
         ls -la docs/
 
-    - name: Configure Git
-      run: |
-        git config --global user.name "GitHub Actions Bot"
-        git config --global user.email "actions@github.com"
-        
     - name: Deploy to GitHub Pages
       uses: peaceiris/actions-gh-pages@v3
       if: success()
@@ -84,23 +69,3 @@ jobs:
         publish_dir: ./docs
         force_orphan: true
         commit_message: "docs: update documentation [skip ci]"
-        enable_jekyll: false
-        
-    - name: Check Deployment
-      run: |
-        echo "Documentation deployment complete"
-        echo "Please check the gh-pages branch for the deployed documentation"
-        echo "It may take a few minutes for the pages to be available"
-
-  # Optional: Add a notification job
-  notify:
-    needs: [test, docs]
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-    - name: Check Status
-      run: |
-        if [ "${{ needs.test.result }}" = "failure" ] || [ "${{ needs.docs.result }}" = "failure" ]; then
-          echo "::error::Workflow failed!"
-          exit 1
-        fi
