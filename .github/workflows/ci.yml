@@ -31,41 +31,46 @@ jobs:
         zig build bench
 
   docs:
-    needs: test
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Setup Zig
-      uses: goto-bus-stop/setup-zig@v2
-      with:
-        version: 0.13.0
-    
-    - name: Setup Cache Directories
-      run: |
-        mkdir -p ~/.cache/zig
-        sudo chown -R $(id -u):$(id -g) ~/.cache/zig
-        sudo chmod -R 755 ~/.cache/zig
-        
-    - name: Generate Documentation
-      run: |
-        echo "Starting documentation generation..."
-        mkdir -p docs
-        zig test -femit-docs src/root.zig --dep std
-        mv *.html docs/ 2>/dev/null || echo "No HTML files to move"
-        
-        echo "Documentation files:"
-        ls -la docs/
+      needs: test
+      if: github.ref == 'refs/heads/main'
+      runs-on: ubuntu-latest
+      permissions:
+        contents: write
+      
+      steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.13.0
+      
+      - name: Generate Documentation
+        run: |
+          echo "Starting documentation generation..."
+          mkdir -p docs
+          
+          # Get zig lib directory
+          ZIG_LIB_DIR="$(zig env | grep lib_dir | cut -d'"' -f2)"
+          echo "Zig lib directory: $ZIG_LIB_DIR"
+          
+          # Generate docs
+          zig test --zig-lib-dir "$ZIG_LIB_DIR" -femit-docs src/root.zig
+          
+          echo "Looking for generated docs..."
+          find . -name "*.html"
+          
+          # Move any generated HTML files to docs directory
+          mv *.html docs/ 2>/dev/null || echo "No HTML files to move"
+          
+          echo "Final docs directory contents:"
+          ls -la docs/
 
-    - name: Deploy to GitHub Pages
-      uses: peaceiris/actions-gh-pages@v3
-      if: success()
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        publish_dir: ./docs
-        force_orphan: true
-        commit_message: "docs: update documentation [skip ci]"
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        if: success()
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs
+          force_orphan: true
+          commit_message: "docs: update documentation [skip ci]"
