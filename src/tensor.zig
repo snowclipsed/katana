@@ -255,6 +255,27 @@ pub fn Tensor(comptime DataType: type) type {
             self.allocator.free(self.shape);
             self.shape = new_shape;
         }
+
+        /// Returns a slice of the tensor along the specified dimension at the given index.
+        ///
+        /// # Parameters
+        /// - `dim`: The dimension along which to slice the tensor.
+        /// - `index`: The index at which to slice the tensor.
+        ///
+        /// # Returns
+        /// - `Self`: A new tensor representing the slice along the specified dimension.
+        ///
+        /// # Errors
+        /// - Returns an error if the dimension or index is out of bounds.
+        ///
+        /// # Example
+        /// ```zig
+        /// const tensor = Tensor.init(...); // Initialize your tensor here
+        /// const slice = try tensor.getDimensionSlice(1, 2); // Get a slice along dimension 1 at index 2
+        /// ```
+        ///
+        /// Note: This function assumes that the tensor is 2D and may not work
+        /// correctly for tensors of other dimensions.
         pub fn getDimensionSlice(self: Self, dim: usize, index: usize) !Self {
             // Verify dimension is valid
             if (dim >= self.shape.len) {
@@ -360,7 +381,16 @@ pub fn Tensor(comptime DataType: type) type {
             return result;
         }
 
-        // Extension to the Tensor type
+        /// Returns a slice of the input array from the specified start index to the end index.
+        ///
+        /// - Parameters:
+        ///   - array: The input array to slice.
+        ///   - start: The starting index of the slice (inclusive).
+        ///   - end: The ending index of the slice (exclusive).
+        ///
+        /// - Returns: A slice of the input array from the start index to the end index.
+        ///
+        /// - Throws: An error if the start or end indices are out of bounds.
         pub fn getSliceRange(self: Self, slices: []const Slice) !Self {
             if (slices.len > self.shape.len) {
                 return error.TooManySlices;
@@ -619,6 +649,7 @@ pub fn Tensor(comptime DataType: type) type {
             try self.formatTensor(writer);
         }
 
+        /// Print a tensor to stdout
         pub fn print(self: Self) void {
             std.debug.print("{}", .{self});
         }
@@ -833,6 +864,8 @@ pub fn Tensor(comptime DataType: type) type {
 const PrintOptions = struct {
     precision: u8 = 8,
 };
+
+/// Error type for tensor stability checks
 pub const StabilityError = error{
     HasNaN,
     HasPositiveInfinity,
@@ -840,7 +873,7 @@ pub const StabilityError = error{
     HasInfinity,
 };
 
-// Slice type to represent Python-style slice operations
+/// Slice type to represent Python-style slice operations
 pub const Slice = struct {
     start: ?usize,
     end: ?usize,
