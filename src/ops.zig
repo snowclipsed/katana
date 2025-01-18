@@ -13,8 +13,19 @@ const expectError = testing.expectError;
 const max_items_per_row = 6; // Number of elements to show per row
 const max_rows = 8; // Maximum number of rows to show before truncating
 
-// SIMD Tuning parameters
+/// SIMD Tuning parameters
+/// Tile size for SIMD matrix multiplication.
+/// The tile size is used to partition the input matrices into smaller submatrices
+/// that can be loaded into the cache and processed efficiently.
+/// The tile size should be chosen based on the cache size and the size of the
+/// input matrices to maximize cache utilization and minimize cache misses.
+/// Default value is 64.
 pub const Tile: usize = 64; // Tile size
+/// Vector size for SIMD operations.
+/// The vector size is used to load and process multiple elements in parallel
+/// using SIMD instructions. The vector size should be chosen based on the
+/// target SIMD architecture to maximize performance.
+/// Default value is 32.
 pub const Vec: usize = 32; // Vector size
 
 //--------------------------------- Transformation Operations ---------------------------------
@@ -1876,6 +1887,23 @@ fn softmax(comptime T: type, tensor: *Tensor(T), dim: usize) !void {
     }
 }
 
+/// Applies the Gaussian Error Linear Unit (GELU) activation function to the input.
+///
+/// The GELU activation function is defined as:
+/// GELU(x) = 0.5 * x * (1 + tanh(sqrt(2 / π) * (x + 0.044715 * x^3)))
+///
+/// This function is used in neural networks to introduce non-linearity.
+/// It is known for its smooth and differentiable properties, which can help
+/// with the training of deep learning models.
+///
+/// Parameters:
+/// - `x`: The input value to the GELU function.
+///
+/// Returns:
+/// - The output value after applying the GELU function to the input.
+///
+/// Note:
+/// - If the array is empty, the behavior of this function is undefined.
 pub fn gelu(comptime T: type, tensor: *Tensor(T)) !void {
     if (@typeInfo(T) != .Float) {
         @compileError("GELU operation requires floating-point tensor");
@@ -1893,6 +1921,19 @@ pub fn gelu(comptime T: type, tensor: *Tensor(T)) !void {
     }
 }
 
+/// Returns the index of the maximum value in the given array.
+///
+/// This function iterates through the provided array and compares each element
+/// to find the maximum value. It then returns the index of this maximum value.
+///
+/// Parameters:
+/// - `array`: The array of values to search through.
+///
+/// Returns:
+/// - `usize`: The index of the maximum value in the array.
+///
+/// Note:
+/// - If the array is empty, the behavior of this function is undefined.
 pub fn argmax(comptime T: type, input: Tensor(T)) !usize {
     if (input.data.len == 0 or input.shape.len == 0) {
         return error.EmptyTensor;
