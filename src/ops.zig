@@ -1431,6 +1431,31 @@ const ThreadContext = struct {
     shared_counter: *ThreadLocalData,
 };
 
+/// Multiplies two matrices and returns the resulting matrix.
+///
+/// This function takes two 2D arrays (matrices) as input and performs matrix multiplication.
+/// The number of columns in the first matrix must be equal to the number of rows in the second matrix.
+///
+/// # Parameters
+/// - `matrix1`: The first matrix (2D array) to be multiplied.
+/// - `matrix2`: The second matrix (2D array) to be multiplied.
+///
+/// # Returns
+/// A new matrix (2D array) which is the result of multiplying `matrix1` by `matrix2`.
+///
+/// # Example
+/// ```zig
+/// const matrix1 = [[1, 2, 3], [4, 5, 6]];
+/// const matrix2 = [[7, 8], [9, 10], [11, 12]];
+/// const result = matmul(matrix1, matrix2);
+/// // result is [[58, 64], [139, 154]]
+/// ```
+///
+/// # Notes
+/// - The function assumes that the input tensors are properly initialized and deinitialized.
+/// - The function uses SIMD for f32 data type to optimize matrix multiplication
+/// - The function uses a simple triple-loop matrix multiplication for other data types.
+/// - SIMD support for f64 and f16 will be added in future versions.
 pub fn matmul(comptime T: type, a: Tensor(T), b: Tensor(T), allocator: Allocator) !Tensor(T) {
     if (a.shape.len != 2 or b.shape.len != 2) {
         return error.InvalidDimensions;
