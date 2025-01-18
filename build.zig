@@ -5,7 +5,7 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     // Main module
-    _ = b.addModule("tensor", .{
+    _ = b.addModule("katana", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
