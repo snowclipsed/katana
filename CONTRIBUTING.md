@@ -1,6 +1,6 @@
-# Contributing to Tensor-Zig
+# Contributing to Katana
 
-Thank you for your interest in contributing to Tensor-Zig! We value all contributions, whether they're bug fixes, new features, documentation improvements, or test additions.
+Thank you for your interest in contributing to Katana! We value all contributions, whether they're bug fixes, new features, documentation improvements, or test additions.
 
 ## Getting Started
 
@@ -14,8 +14,8 @@ Thank you for your interest in contributing to Tensor-Zig! We value all contribu
 
 1. Clone your fork:
    ```bash
-   git clone https://github.com/your-username/tensor-zig.git
-   cd tensor-zig
+   git clone https://github.com/snowclipsed/katana.git
+   cd katana
    ```
 
 2. Set up development environment:
@@ -92,20 +92,14 @@ When contributing, please:
 - Focus on the technical merits of contributions
 - Keep discussions professional and on-topic
 
-## Questions or Need Help?
-
-- Open a [GitHub Discussion](link-to-your-discussions)
-- Join our [Discord/Community Channel](link-to-your-community)
-- Check existing issues and discussions before posting
-
 ## License
 
-By contributing to Tensor-Zig, you agree that your contributions will be licensed under the Apache License, Version 2.0. See the [LICENSE](LICENSE) file for the full license text.
+By contributing to Katana, you agree that your contributions will be licensed under the Apache License, Version 2.0. See the [LICENSE](LICENSE) file for the full license text.
 
 All file headers in the source code should include the following license header:
 
 ```
-// Copyright 2024 Tensor-Zig Contributors
+// Copyright 2024 Katana Contributors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.

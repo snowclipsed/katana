@@ -1,12 +1,12 @@
-# Tensor-Zig
-
-A tensor computation library for Zig, providing efficient matrix operations and tensor manipulations.
+# Katana
+![alt text](katana-header.png)
+A light and efficient tensor library for Zig with a focus on simplicity and ease of use.
 
 ## Installation
 
 ### Prerequisites
 
-> **Important**: This library currently only works with Zig version 0.13.0. Support for other versions is planned for future releases as Zig itself progresses as a language.
+> **Important**: This library currently only works with Zig version 0.13.0. Support for the upcoming 0.14.0 version is planned.
 
 Required:
 - Zig compiler version 0.13.0
@@ -16,26 +16,58 @@ If you're using a different Zig version, you may encounter compatibility issues.
 
 ### Adding the Library to Your Project
 
-There are two ways to add Tensor-Zig to your project:
+There are two ways to add Katana to your project:
 
 #### Method 1: Using `zig fetch`
 
 1. Ensure you have a `build.zig.zon` file in your project root.
 2. Run the following command:
    ```bash
-   zig fetch --save https://github.com/snowclipsed/tensor-zig/archive/refs/tags/v0.1.0.tar.gz
+   zig fetch --save https://github.com/snowclipsed/katana/archive/refs/tags/<version>.tar.gz
    ```
+
+##### Example: Installing Version 0.1.0
+
+To install version 0.1.0 of Katana, use the following command:
+
+```bash
+zig fetch --save https://github.com/snowclipsed/katana/archive/refs/tags/v0.1.0.tar.gz
+```
 
 #### Method 2: Using Git
 1. Clone the repository
 2. Run:
    ```bash
-   git fetch --save <link/to/tensor-zig>
+   git clone https://github.com/snowclipsed/katana
    ```
+
+Now, your build.zig.zon might look something like this:
+
+```zig
+.{
+    .name = "test-tensor",
+
+    .version = "0.0.0",
+
+    .dependencies = .{
+        .katana = .{
+            .url = "../katana",
+            .hash = "122099ca4b8c1e2b85203e73491785f91b8c585729a60d6c81b3201fcaaefe9b692c",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
+
+```
+
 
 ### Configuring Your Build
 
-Add Tensor-Zig as a dependency in your `build.zig` file. Here's a complete example:
+Add Katana as a dependency in your `build.zig` file. Here's a complete example:
 
 ```zig
 const std = @import("std");
@@ -44,13 +76,13 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    // Load the tensor dependency
-    const package = b.dependency("tensor", .{
+    // load the "katana" dependency from build.zig.zon
+    const package = b.dependency("katana", .{
         .target = target,
         .optimize = optimize,
     });
 
-    const module = package.module("tensor");
+    const module = package.module("katana");
 
     const exe = b.addExecutable(.{
         .name = "test-tensor",
@@ -60,9 +92,11 @@ pub fn build(b: *std.Build) void {
     });
 
     b.installArtifact(exe);
-    exe.root_module.addImport("tensor", module);
+    // add the "katana" dependency to the root module
+    exe.root_module.addImport("katana", module);
 
     const run_cmd = b.addRunArtifact(exe);
+
     run_cmd.step.dependOn(b.getInstallStep());
 
     if (b.args) |args| {
@@ -77,18 +111,20 @@ pub fn build(b: *std.Build) void {
 #### Build File Explanation
 
 - The build file sets up a standard Zig executable project
-- It loads the tensor package using `b.dependency("tensor", ...)`
+- It loads the `katana` package using `b.dependency("katana", ...)`
 - The package is added as a module that can be imported in your code
-- The executable is configured with the tensor module as a dependency
+- The executable is configured with the Katana module as a dependency
 - A run step is added for convenience
 
 ## Usage
 
-Here's a basic example showing how to use Tensor-Zig:
+Here's a basic example showing how to use Katana to do matrix multiplication:
 
 ```zig
 const std = @import("std");
-const tensor = @import("tensor");
+const k = @import("katana");
+const tensor = k.Tensor;
+const ops = k.ops;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -96,31 +132,26 @@ pub fn main() !void {
     const allocator = gpa.allocator();
 
     // Create tensors
-    var a = try tensor.Tensor(f32).init(allocator, &[_]usize{ 2, 3 });
+    var a = try tensor(f32).init(allocator, &[_]usize{ 2, 3 });
     defer a.deinit();
-    var b = try tensor.Tensor(f32).init(allocator, &[_]usize{ 3, 2 });
+    var b = try tensor(f32).init(allocator, &[_]usize{ 3, 2 });
     defer b.deinit();
 
-    // Perform matrix multiplication
-    var c = try tensor.matmul(f32, a, b, allocator);
+    // matrix multiplication
+    var c = try ops.matmul(f32, a, b, allocator);
     defer c.deinit();
 
-    std.debug.print("Result: {}\n", .{c});
+    c.print2D();
 }
-```
 
-This example demonstrates:
-- Importing the tensor library
-- Creating tensors with specific dimensions
-- Performing matrix multiplication
-- Proper memory management using defer statements
+```
 
 ## License
 
 This project is licensed under the Apache License, Version 2.0 - see the [LICENSE](LICENSE) file for details.
 
 ```
-Copyright 2024 Tensor-Zig Contributors
+Copyright 2024 Katana Contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -137,14 +168,20 @@ limitations under the License.
 
 ## Contributing
 
-We welcome contributions to Tensor-Zig! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details on how to submit changes, coding standards, testing requirements, and more.
-
+We welcome contributions to Katana! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details on how to submit changes, coding standards, testing requirements, and more.
 
 ---
 
 ## TODO
-✅ Add flatten to tensor intrinsic
-- Documentation Page
-- SIMD Ops (soon!)
-- Write usage guide
-- Write more extensive testing suite for ML ops
+- Full SIMD Ops Set (soon!)
+- Extended usage guide
+- More ML Ops and tests
+- Autograd capability/Graph Compiler
+- CUDA/GPU support
+
+## List of ops to be added soon:
+- Reduction operations : sum, mean, max/min, prod, argmin, any/all
+- Element-wise operations : pow, exp, log/log2/log10, sqrt, sign, round/floor/ceil, clip/clamp
+- Statistical operations : standard deviation, variance, percentile, covariance matrix support, correlation matrix support
+- Linear Algebra operations : matrix trace, determinant, inverse, eigenvalues/vectors, SVD, QR comp, matrix/vector norm
+- Advanced math/ML : multidim conv, pool, pad, roll, repeat, gather/scatter
