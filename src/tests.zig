@@ -2422,6 +2422,83 @@ test "argmax with empty tensor" {
 
 // SIMD OPS
 
+// Helper function to create and fill a tensor with test data
+fn createTestTensor(comptime T: type, allocator: std.mem.Allocator, shape: []const usize, data: []const T) !Tensor(T) {
+    const tensor = try Tensor(T).init(allocator, shape);
+    @memcpy(tensor.data, data);
+    return tensor;
+}
+
+// Helper function to compare tensors with epsilon for floating point
+pub fn compareTensors(comptime T: type, expected: Tensor(T), actual: Tensor(T)) !void {
+    // Ensure shapes match
+    if (!std.mem.eql(usize, expected.shape, actual.shape)) {
+        return error.ShapeMismatch;
+    }
+
+    for (expected.data, actual.data, 0..) |exp, act, i| {
+        switch (@typeInfo(T)) {
+            .Float => {
+                // Handle special values
+                if (std.math.isNan(exp)) {
+                    if (!std.math.isNan(act)) {
+                        std.debug.print("\nSpecial value mismatch at index {d}:\nExpected: NaN\nActual: {d}\n", .{ i, act });
+                        return error.ValueMismatch;
+                    }
+                    continue;
+                }
+                if (std.math.isNan(act)) {
+                    if (!std.math.isNan(exp)) {
+                        std.debug.print("\nSpecial value mismatch at index {d}:\nExpected: {d}\nActual: NaN\n", .{ i, exp });
+                        return error.ValueMismatch;
+                    }
+                    continue;
+                }
+                if (std.math.isInf(exp) or std.math.isInf(act)) {
+                    if (exp != act) {
+                        std.debug.print("\nSpecial value mismatch at index {d}:\nExpected: {d}\nActual: {d}\n", .{ i, exp, act });
+                        return error.ValueMismatch;
+                    }
+                    continue;
+                }
+
+                // For regular values, use relative tolerance with absolute fallback
+                const abs_diff = @abs(exp - act);
+                const rel_tol: T = switch (T) {
+                    f32 => 1e-6, // More lenient tolerance for f32
+                    f64 => 1e-12,
+                    else => 0,
+                };
+                const abs_tol: T = switch (T) {
+                    f32 => 1e-5,
+                    f64 => 1e-12,
+                    else => 0,
+                };
+
+                // Use absolute tolerance for very small numbers
+                if (@abs(exp) < abs_tol) {
+                    if (abs_diff > abs_tol) {
+                        std.debug.print("\nValue mismatch at index {d}:\nExpected: {d}\nActual: {d}\nAbsolute difference: {d}\n", .{ i, exp, act, abs_diff });
+                        return error.ValueMismatch;
+                    }
+                } else {
+                    // Use relative tolerance for larger numbers
+                    const rel_diff = abs_diff / @abs(exp);
+                    if (rel_diff > rel_tol) {
+                        std.debug.print("\nValue mismatch at index {d}:\nExpected: {d}\nActual: {d}\nRelative difference: {d}\n", .{ i, exp, act, rel_diff });
+                        return error.ValueMismatch;
+                    }
+                }
+            },
+            else => {
+                if (exp != act) {
+                    return error.ValueMismatch;
+                }
+            },
+        }
+    }
+}
+
 test "matmul basic functionality" {
     const allocator = testing.allocator;
 
@@ -2453,88 +2530,156 @@ test "matmul basic functionality" {
     }
 }
 
-test "matmul edge cases" {
+test "matmul - f32 2x2" {
     const allocator = testing.allocator;
 
-    // Test case 1: 1x1 matrices
+    // Test case 1: Identity matrix multiplication
     {
-        var a = try Tensor(f32).init(allocator, &[_]usize{ 1, 1 });
-        defer a.deinit();
-        var b = try Tensor(f32).init(allocator, &[_]usize{ 1, 1 });
-        defer b.deinit();
+        const a_data = [_]f32{ 1, 0, 0, 1 };
+        const b_data = [_]f32{ 2, 3, 4, 5 };
+        const expected_data = [_]f32{ 2, 3, 4, 5 };
 
-        a.data[0] = 3.0;
-        b.data[0] = 4.0;
+        var a = try createTestTensor(f32, allocator, &[_]usize{ 2, 2 }, &a_data);
+        defer a.deinit();
+        var b = try createTestTensor(f32, allocator, &[_]usize{ 2, 2 }, &b_data);
+        defer b.deinit();
+        var expected = try createTestTensor(f32, allocator, &[_]usize{ 2, 2 }, &expected_data);
+        defer expected.deinit();
 
         var result = try ops.matmul(f32, a, b, allocator);
         defer result.deinit();
 
-        try testing.expectApproxEqAbs(result.data[0], 12.0, 1e-6);
+        try compareTensors(f32, expected, result);
     }
 
-    // Test case 2: Tall matrix × Wide matrix
+    // Test case 2: Standard matrix multiplication
     {
-        var a = try Tensor(f32).init(allocator, &[_]usize{ 3, 1 });
+        const a_data = [_]f32{ 1, 2, 3, 4 };
+        const b_data = [_]f32{ 5, 6, 7, 8 };
+        const expected_data = [_]f32{ 19, 22, 43, 50 };
+
+        var a = try createTestTensor(f32, allocator, &[_]usize{ 2, 2 }, &a_data);
         defer a.deinit();
-        var b = try Tensor(f32).init(allocator, &[_]usize{ 1, 3 });
+        var b = try createTestTensor(f32, allocator, &[_]usize{ 2, 2 }, &b_data);
         defer b.deinit();
-
-        a.data[0] = 1.0;
-        a.data[1] = 2.0;
-        a.data[2] = 3.0;
-
-        b.data[0] = 4.0;
-        b.data[1] = 5.0;
-        b.data[2] = 6.0;
+        var expected = try createTestTensor(f32, allocator, &[_]usize{ 2, 2 }, &expected_data);
+        defer expected.deinit();
 
         var result = try ops.matmul(f32, a, b, allocator);
         defer result.deinit();
 
-        try testing.expectEqual(result.shape[0], @as(usize, 3));
-        try testing.expectEqual(result.shape[1], @as(usize, 3));
-    }
-
-    // Test case 3: Zero matrices
-    {
-        var a = try Tensor(f32).init(allocator, &[_]usize{ 2, 2 });
-        defer a.deinit();
-        var b = try Tensor(f32).init(allocator, &[_]usize{ 2, 2 });
-        defer b.deinit();
-
-        @memset(a.data, 0);
-        @memset(b.data, 0);
-
-        var result = try ops.matmul(f32, a, b, allocator);
-        defer result.deinit();
-
-        for (result.data) |val| {
-            try testing.expectEqual(val, 0);
-        }
+        try compareTensors(f32, expected, result);
     }
 }
 
-test "matmul error cases" {
+test "matmul - f32 large matrices" {
+    const allocator = testing.allocator;
+    const size = 128; // Large enough to trigger SIMD path
+
+    // Create large matrices
+    var a = try Tensor(f32).init(allocator, &[_]usize{ size, size });
+    defer a.deinit();
+    var b = try Tensor(f32).init(allocator, &[_]usize{ size, size });
+    defer b.deinit();
+    var expected = try Tensor(f32).init(allocator, &[_]usize{ size, size });
+    defer expected.deinit();
+
+    // Initialize with known pattern
+    for (0..size) |i| {
+        for (0..size) |j| {
+            a.data[i * size + j] = @as(f32, @floatFromInt(i + j));
+            b.data[i * size + j] = @as(f32, @floatFromInt(i * j));
+        }
+    }
+
+    // Compute expected result using simple algorithm
+    for (0..size) |i| {
+        for (0..size) |j| {
+            var sum: f32 = 0;
+            for (0..size) |k| {
+                sum += a.data[i * size + k] * b.data[k * size + j];
+            }
+            expected.data[i * size + j] = sum;
+        }
+    }
+
+    // Test SIMD implementation
+    var result = try ops.matmul(f32, a, b, allocator);
+    defer result.deinit();
+
+    try compareTensors(f32, expected, result);
+}
+
+test "matmul - i32 matrices" {
     const allocator = testing.allocator;
 
-    // Test case 1: Mismatched dimensions
-    {
-        var a = try Tensor(f32).init(allocator, &[_]usize{ 2, 3 });
-        defer a.deinit();
-        var b = try Tensor(f32).init(allocator, &[_]usize{ 2, 2 });
-        defer b.deinit();
+    // Test integer matrix multiplication
+    const a_data = [_]i32{ 1, 2, 3, 4 };
+    const b_data = [_]i32{ 5, 6, 7, 8 };
+    const expected_data = [_]i32{ 19, 22, 43, 50 };
 
-        try testing.expectError(error.ShapeMismatch, ops.matmul(f32, a, b, allocator));
-    }
+    var a = try createTestTensor(i32, allocator, &[_]usize{ 2, 2 }, &a_data);
+    defer a.deinit();
+    var b = try createTestTensor(i32, allocator, &[_]usize{ 2, 2 }, &b_data);
+    defer b.deinit();
+    var expected = try createTestTensor(i32, allocator, &[_]usize{ 2, 2 }, &expected_data);
+    defer expected.deinit();
 
-    // Test case 2: Invalid dimensions
-    {
-        var a = try Tensor(f32).init(allocator, &[_]usize{2});
-        defer a.deinit();
-        var b = try Tensor(f32).init(allocator, &[_]usize{ 2, 2 });
-        defer b.deinit();
+    var result = try ops.matmul(i32, a, b, allocator);
+    defer result.deinit();
 
-        try testing.expectError(error.InvalidDimensions, ops.matmul(f32, a, b, allocator));
-    }
+    try compareTensors(i32, expected, result);
+}
+
+test "matmul - f64 matrices" {
+    const allocator = testing.allocator;
+
+    // Test double precision multiplication
+    const a_data = [_]f64{ 1.1, 2.2, 3.3, 4.4 };
+    const b_data = [_]f64{ 5.5, 6.6, 7.7, 8.8 };
+    const expected_data = [_]f64{
+        1.1 * 5.5 + 2.2 * 7.7,
+        1.1 * 6.6 + 2.2 * 8.8,
+        3.3 * 5.5 + 4.4 * 7.7,
+        3.3 * 6.6 + 4.4 * 8.8,
+    };
+
+    var a = try createTestTensor(f64, allocator, &[_]usize{ 2, 2 }, &a_data);
+    defer a.deinit();
+    var b = try createTestTensor(f64, allocator, &[_]usize{ 2, 2 }, &b_data);
+    defer b.deinit();
+    var expected = try createTestTensor(f64, allocator, &[_]usize{ 2, 2 }, &expected_data);
+    defer expected.deinit();
+
+    var result = try ops.matmul(f64, a, b, allocator);
+    defer result.deinit();
+
+    try compareTensors(f64, expected, result);
+}
+
+test "matmul - rectangular matrices" {
+    const allocator = testing.allocator;
+
+    const a_data = [_]f32{ 1, 2, 3, 4, 5, 6 }; // 2x3 matrix
+    const b_data = [_]f32{ 7, 8, 9, 10, 11, 12 }; // 3x2 matrix
+    const expected_data = [_]f32{
+        1 * 7 + 2 * 9 + 3 * 11,
+        1 * 8 + 2 * 10 + 3 * 12,
+        4 * 7 + 5 * 9 + 6 * 11,
+        4 * 8 + 5 * 10 + 6 * 12,
+    };
+
+    var a = try createTestTensor(f32, allocator, &[_]usize{ 2, 3 }, &a_data);
+    defer a.deinit();
+    var b = try createTestTensor(f32, allocator, &[_]usize{ 3, 2 }, &b_data);
+    defer b.deinit();
+    var expected = try createTestTensor(f32, allocator, &[_]usize{ 2, 2 }, &expected_data);
+    defer expected.deinit();
+
+    var result = try ops.matmul(f32, a, b, allocator);
+    defer result.deinit();
+
+    try compareTensors(f32, expected, result);
 }
 
 fn naivematmul(comptime T: type, tensor: *Tensor(T), other: Tensor(T)) !Tensor(T) {
@@ -2604,6 +2749,162 @@ test "matmul correctness against reference" {
         }
 
         // std.debug.print("Test passed for size: M={}, N={}, K={}\n", .{ M, N, K });
+    }
+}
+
+test "matmul - mixed sizes" {
+    const allocator = testing.allocator;
+
+    // Test various matrix size combinations that might trigger different code paths
+    const sizes = [_]usize{ 1, 2, 3, 4, 7, 8, 15, 16, 31, 32, 63, 64, 65, 127, 128, 129 };
+
+    for (sizes) |m| {
+        for (sizes) |k| {
+            for (sizes) |n| {
+                // Create input matrices
+                var a = try Tensor(f32).init(allocator, &[_]usize{ m, k });
+                defer a.deinit();
+                var b = try Tensor(f32).init(allocator, &[_]usize{ k, n });
+                defer b.deinit();
+
+                // Fill with simple pattern
+                for (0..m) |i| {
+                    for (0..k) |j| {
+                        a.data[i * k + j] = @as(f32, @floatFromInt((i + j) % 5));
+                    }
+                }
+                for (0..k) |i| {
+                    for (0..n) |j| {
+                        b.data[i * n + j] = @as(f32, @floatFromInt((i * j) % 7));
+                    }
+                }
+
+                // Compute result using our implementation
+                var result = try ops.matmul(f32, a, b, allocator);
+                defer result.deinit();
+
+                // Verify dimensions
+                try testing.expectEqual(@as(usize, m), result.shape[0]);
+                try testing.expectEqual(@as(usize, n), result.shape[1]);
+
+                // Compute expected result using naive approach
+                var expected = try Tensor(f32).init(allocator, &[_]usize{ m, n });
+                defer expected.deinit();
+
+                for (0..m) |i| {
+                    for (0..n) |j| {
+                        var sum: f32 = 0;
+                        for (0..k) |p| {
+                            sum += a.data[i * k + p] * b.data[p * n + j];
+                        }
+                        expected.data[i * n + j] = sum;
+                    }
+                }
+
+                // Compare results
+                try compareTensors(f32, expected, result);
+            }
+        }
+    }
+}
+
+test "matmul - i64 large matrices" {
+    const allocator = testing.allocator;
+    const size = 128; // Large enough to trigger SIMD path
+
+    var a = try Tensor(i64).init(allocator, &[_]usize{ size, size });
+    defer a.deinit();
+    var b = try Tensor(i64).init(allocator, &[_]usize{ size, size });
+    defer b.deinit();
+
+    // Initialize with patterns that won't overflow
+    for (0..size) |i| {
+        for (0..size) |j| {
+            a.data[i * size + j] = @intCast((i + j) % 17);
+            b.data[i * size + j] = @intCast((i * j) % 19);
+        }
+    }
+
+    var result = try ops.matmul(i64, a, b, allocator);
+    defer result.deinit();
+
+    // Verify against naive implementation
+    var expected = try Tensor(i64).init(allocator, &[_]usize{ size, size });
+    defer expected.deinit();
+
+    for (0..size) |i| {
+        for (0..size) |j| {
+            var sum: i64 = 0;
+            for (0..size) |k| {
+                sum += a.data[i * size + k] * b.data[k * size + j];
+            }
+            expected.data[i * size + j] = sum;
+        }
+    }
+
+    try compareTensors(i64, expected, result);
+}
+
+test "matmul - strided matrices" {
+    const allocator = testing.allocator;
+
+    // Create a larger matrix and test multiplication of submatrices
+    const full_size = 256;
+    const sub_size = 64;
+
+    var full_a = try Tensor(f32).init(allocator, &[_]usize{ full_size, full_size });
+    defer full_a.deinit();
+    var full_b = try Tensor(f32).init(allocator, &[_]usize{ full_size, full_size });
+    defer full_b.deinit();
+
+    // Initialize with recognizable pattern
+    for (0..full_size) |i| {
+        for (0..full_size) |j| {
+            full_a.data[i * full_size + j] = @floatFromInt((i + j) % 7);
+            full_b.data[i * full_size + j] = @floatFromInt((i * j) % 5);
+        }
+    }
+
+    // Extract and multiply submatrices at different offsets
+    const offsets = [_]usize{ 0, 1, 31, 32, 63, 64, 65, 127, 128 };
+    for (offsets) |offset_i| {
+        for (offsets) |offset_j| {
+            if (offset_i + sub_size > full_size or offset_j + sub_size > full_size) continue;
+
+            // Create views of submatrices
+            var sub_a = try Tensor(f32).init(allocator, &[_]usize{ sub_size, sub_size });
+            defer sub_a.deinit();
+            var sub_b = try Tensor(f32).init(allocator, &[_]usize{ sub_size, sub_size });
+            defer sub_b.deinit();
+
+            // Copy submatrices
+            for (0..sub_size) |i| {
+                for (0..sub_size) |j| {
+                    sub_a.data[i * sub_size + j] = full_a.data[(i + offset_i) * full_size + (j + offset_j)];
+                    sub_b.data[i * sub_size + j] = full_b.data[(i + offset_i) * full_size + (j + offset_j)];
+                }
+            }
+
+            // Multiply submatrices
+            var result = try ops.matmul(f32, sub_a, sub_b, allocator);
+            defer result.deinit();
+
+            // Verify against naive implementation
+            var expected = try Tensor(f32).init(allocator, &[_]usize{ sub_size, sub_size });
+            defer expected.deinit();
+
+            for (0..sub_size) |i| {
+                for (0..sub_size) |j| {
+                    var sum: f32 = 0;
+                    for (0..sub_size) |k| {
+                        sum += sub_a.data[i * sub_size + k] * sub_b.data[k * sub_size + j];
+                    }
+                    expected.data[i * sub_size + j] = sum;
+                }
+            }
+
+            try compareTensors(f32, expected, result);
+        }
     }
 }
 

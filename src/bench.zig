@@ -4,7 +4,6 @@ const Tensor = tensormod.Tensor;
 const ops = @import("ops.zig");
 const matmul = ops.matmul;
 const T = ops.Tile;
-const V = ops.Vec;
 
 pub fn calculateGflops(allocator: std.mem.Allocator, M: usize, N: usize, K: usize, iterations: usize) !f64 {
     const shape_a = [_]usize{ M, K };
@@ -70,7 +69,7 @@ pub fn main() !void {
     const iterations = 5;
 
     try std.io.getStdOut().writer().print("\nRunning MatMul Benchmark\n", .{});
-    try std.io.getStdOut().writer().print("T = {d} \nV = {d} \n", .{ T, V });
+    try std.io.getStdOut().writer().print("T = {d} \n", .{T});
     try std.io.getStdOut().writer().print("Number of threads = {d}\n", .{try std.Thread.getCpuCount()});
 
     for (sizes) |size| {

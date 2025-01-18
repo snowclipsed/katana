@@ -6,6 +6,8 @@ const Tensor = tensormod.Tensor;
 const StabilityError = tensormod.StabilityError;
 const Slice = tensormod.Slice;
 const testing = std.testing;
+const builtin = @import("builtin");
+const atomic = std.atomic;
 const expectEqual = testing.expectEqual;
 const expectError = testing.expectError;
 
@@ -20,13 +22,21 @@ const max_rows = 8; // Maximum number of rows to show before truncating
 /// The tile size should be chosen based on the cache size and the size of the
 /// input matrices to maximize cache utilization and minimize cache misses.
 /// Default value is 64.
-pub const Tile: usize = 64; // Tile size
+pub const Tile: usize = 160; // Tile size for matrix blocking
+pub const Vec: usize = 8; // Vector size for SIMD operations
+
+const CACHE_LINE_SIZE: usize = atomic.cache_line;
+const CHUNK_SIZE: usize = 1;
+const AVX2_ALIGNMENT = 32;
+const MICRO_KERNEL_SIZE: usize = Vec; // Match micro-kernel to vector size
+
+const Vec8f = @Vector(8, f32);
+
 /// Vector size for SIMD operations.
 /// The vector size is used to load and process multiple elements in parallel
 /// using SIMD instructions. The vector size should be chosen based on the
 /// target SIMD architecture to maximize performance.
 /// Default value is 32.
-pub const Vec: usize = 32; // Vector size
 
 //--------------------------------- Transformation Operations ---------------------------------
 
@@ -1403,9 +1413,9 @@ pub fn broadcast_subtract(comptime T: type, a: *Tensor(T), b: Tensor(T)) !void {
     @memcpy(a.data, result.data);
 }
 
-const WorkItem = struct {
-    i: usize,
-    j: usize,
+const ThreadLocalData = struct {
+    current_index: atomic.Value(usize) align(CACHE_LINE_SIZE),
+    _padding: [CACHE_LINE_SIZE - @sizeOf(atomic.Value(usize))]u8 = undefined,
 };
 
 const ThreadContext = struct {
@@ -1415,143 +1425,13 @@ const ThreadContext = struct {
     M: usize,
     N: usize,
     K: usize,
-    work_queue: *ArrayList(WorkItem),
-    mutex: std.Thread.Mutex,
+    tiles_M: usize,
+    tiles_N: usize,
+    total_tiles: usize,
+    shared_counter: *ThreadLocalData,
 };
 
-fn tiledMultiplyKernel(
-    A: []const f32,
-    B: []const f32,
-    local_C: *[Tile][Tile]f32,
-    N: usize,
-    K: usize,
-    i_start: usize,
-    j_start: usize,
-    k_start: usize,
-    i_end: usize,
-    j_end: usize,
-    k_end: usize,
-) void {
-    var A_local: [Tile][Tile]f32 = undefined;
-    var B_local: [Tile][Tile]f32 = undefined;
-
-    // Load A and B into local buffers
-    for (0..Tile) |i| {
-        for (0..Tile) |k| {
-            if (i_start + i < i_end and k_start + k < k_end) {
-                A_local[i][k] = A[(i_start + i) * K + (k_start + k)];
-            } else {
-                A_local[i][k] = 0;
-            }
-        }
-    }
-
-    for (0..Tile) |k| {
-        for (0..Tile) |j| {
-            if (k_start + k < k_end and j_start + j < j_end) {
-                B_local[k][j] = B[(k_start + k) * N + (j_start + j)];
-            } else {
-                B_local[k][j] = 0;
-            }
-        }
-    }
-
-    // Compute tile with vectorization
-    var i: usize = 0;
-    while (i < Tile) : (i += 1) {
-        var j: usize = 0;
-        while (j < Tile) : (j += Vec) {
-            var vec_sum: @Vector(Vec, f32) = @splat(0);
-            var k: usize = 0;
-            while (k < Tile) : (k += 1) {
-                const a_val = A_local[i][k];
-                const a_vec = @as(@Vector(Vec, f32), @splat(a_val));
-                const b_vec = blk: {
-                    var temp: @Vector(Vec, f32) = undefined;
-                    for (0..Vec) |idx| {
-                        temp[idx] = B_local[k][j + idx];
-                    }
-                    break :blk temp;
-                };
-                vec_sum += a_vec * b_vec;
-            }
-
-            // Store results in local buffer
-            for (0..Vec) |idx| {
-                local_C[i][j + idx] += vec_sum[idx];
-            }
-        }
-    }
-}
-
-fn workerThread(context: *ThreadContext) void {
-    while (true) {
-        // Get next work item
-        context.mutex.lock();
-        const work_item = if (context.work_queue.popOrNull()) |item| item else {
-            context.mutex.unlock();
-            break;
-        };
-        context.mutex.unlock();
-
-        // Process tile
-        const i_start = work_item.i * Tile;
-        const j_start = work_item.j * Tile;
-        const i_end = @min(i_start + Tile, context.M);
-        const j_end = @min(j_start + Tile, context.N);
-
-        var local_C: [Tile][Tile]f32 = [_][Tile]f32{[_]f32{0} ** Tile} ** Tile;
-
-        var k: usize = 0;
-        while (k < context.K) : (k += Tile) {
-            const k_end = @min(k + Tile, context.K);
-            tiledMultiplyKernel(
-                context.a,
-                context.b,
-                &local_C,
-                context.N,
-                context.K,
-                i_start,
-                j_start,
-                k,
-                i_end,
-                j_end,
-                k_end,
-            );
-        }
-
-        // Accumulate results to global C
-        for (i_start..i_end) |i| {
-            for (j_start..j_end) |j| {
-                context.c[i * context.N + j] += local_C[i - i_start][j - j_start];
-            }
-        }
-    }
-}
-
-/// Multiplies two matrices and returns the result.
-///
-/// This function takes two 2D arrays (matrices) as input and performs
-/// matrix multiplication. The number of columns in the first matrix
-/// must be equal to the number of rows in the second matrix.
-///
-/// Parameters:
-/// - `matrix1`: The first matrix (2D array) to be multiplied.
-/// - `matrix2`: The second matrix (2D array) to be multiplied.
-///
-/// Returns:
-/// - A new matrix (2D array) that is the result of multiplying `matrix1` by `matrix2`.
-///
-/// Throws:
-/// - An error if the number of columns in `matrix1` does not match the number of rows in `matrix2`.
-///
-/// Example:
-/// ```zig
-/// const matrix1 = [[1, 2, 3], [4, 5, 6]];
-/// const matrix2 = [[7, 8], [9, 10], [11, 12]];
-/// const result = matmul(matrix1, matrix2);
-/// // result is [[58, 64], [139, 154]]
-pub fn matmul(comptime DataType: type, a: Tensor(DataType), b: Tensor(DataType), allocator: Allocator) !Tensor(DataType) {
+pub fn matmul(comptime T: type, a: Tensor(T), b: Tensor(T), allocator: Allocator) !Tensor(T) {
     if (a.shape.len != 2 or b.shape.len != 2) {
         return error.InvalidDimensions;
     }
@@ -1559,53 +1439,87 @@ pub fn matmul(comptime DataType: type, a: Tensor(DataType), b: Tensor(DataType),
         return error.ShapeMismatch;
     }
 
+    // Use optimized implementation for f32
+    if (T == f32) {
+        return optimizedMatmulF32(a, b, allocator);
+    }
+
+    // Simple implementation for other types
     const M = a.shape[0];
     const N = b.shape[1];
     const K = a.shape[1];
 
     const result_shape = [_]usize{ M, N };
-    var result = try Tensor(DataType).init(allocator, &result_shape);
+    var result = try Tensor(T).init(allocator, &result_shape);
     errdefer result.deinit();
 
-    // Calculate number of tiles and create work items
-    const tiles_M = (M + Tile - 1) / Tile;
-    const tiles_N = (N + Tile - 1) / Tile;
+    // Initialize result to zero
+    @memset(result.data, 0);
 
-    // Initialize work queue
-    var work_queue = ArrayList(WorkItem).init(allocator);
-    defer work_queue.deinit();
-
-    // Populate work queue
-    for (0..tiles_M) |i| {
-        for (0..tiles_N) |j| {
-            try work_queue.append(.{ .i = i, .j = j });
+    // Simple triple-loop matrix multiplication
+    for (0..M) |i| {
+        for (0..N) |j| {
+            var sum: T = 0;
+            for (0..K) |k| {
+                sum += a.data[i * K + k] * b.data[k * N + j];
+            }
+            result.data[i * N + j] = sum;
         }
     }
 
-    // Shuffle work queue for better load balancing
-    var rng = std.rand.DefaultPrng.init(@intCast(std.time.milliTimestamp()));
-    rng.random().shuffle(WorkItem, work_queue.items);
+    return result;
+}
 
-    // Initialize thread pool
-    const thread_count = try std.Thread.getCpuCount();
-    var thread_pool = try ArrayList(std.Thread).initCapacity(allocator, thread_count);
+fn optimizedMatmulF32(a: Tensor(f32), b: Tensor(f32), allocator: Allocator) !Tensor(f32) {
+    const M = a.shape[0];
+    const N = b.shape[1];
+    const K = a.shape[1];
+
+    const result_shape = [_]usize{ M, N };
+    var result = try Tensor(f32).init(allocator, &result_shape);
+    errdefer result.deinit();
+
+    // Initialize result to zero
+    @memset(result.data, 0);
+
+    // Calculate tile grid dimensions
+    const tiles_M = (M + Tile - 1) / Tile;
+    const tiles_N = (N + Tile - 1) / Tile;
+    const total_tiles = tiles_M * tiles_N;
+
+    // Initialize shared atomic counter
+    var shared_data = ThreadLocalData{ .current_index = atomic.Value(usize).init(0) };
+
+    // Get number of CPU cores
+    const num_threads = try std.Thread.getCpuCount();
+
+    // Create thread pool
+    var thread_pool = try std.ArrayList(std.Thread).initCapacity(allocator, num_threads);
     defer thread_pool.deinit();
 
     // Create thread context
-    var context = ThreadContext{
-        .a = a.getSlice(),
-        .b = b.getSlice(),
-        .c = result.getSlice(),
+    const context = ThreadContext{
+        .a = a.data,
+        .b = b.data,
+        .c = result.data,
         .M = M,
         .N = N,
         .K = K,
-        .work_queue = &work_queue,
-        .mutex = std.Thread.Mutex{},
+        .tiles_M = tiles_M,
+        .tiles_N = tiles_N,
+        .total_tiles = total_tiles,
+        .shared_counter = &shared_data,
     };
 
     // Spawn worker threads
-    for (0..thread_count) |_| {
-        try thread_pool.append(try std.Thread.spawn(.{}, workerThread, .{&context}));
+    const WorkerFn = struct {
+        fn worker(ctx: ThreadContext) void {
+            workerThread(ctx);
+        }
+    };
+
+    for (0..num_threads) |_| {
+        try thread_pool.append(try std.Thread.spawn(.{}, WorkerFn.worker, .{context}));
     }
 
     // Wait for all threads to complete
@@ -1616,6 +1530,171 @@ pub fn matmul(comptime DataType: type, a: Tensor(DataType), b: Tensor(DataType),
     return result;
 }
 
+fn workerThread(ctx: ThreadContext) void {
+    var local_C: [Tile][Tile]f32 align(AVX2_ALIGNMENT) = undefined;
+
+    while (true) {
+        const start_idx = ctx.shared_counter.current_index.fetchAdd(CHUNK_SIZE, .seq_cst);
+        if (start_idx >= ctx.total_tiles) break;
+
+        const end_idx = @min(start_idx + CHUNK_SIZE, ctx.total_tiles);
+        var idx = start_idx;
+
+        while (idx < end_idx) : (idx += 1) {
+            const i = idx / ctx.tiles_N;
+            const j = idx % ctx.tiles_N;
+
+            const i_start = i * Tile;
+            const j_start = j * Tile;
+            const i_end = @min(i_start + Tile, ctx.M);
+            const j_end = @min(j_start + Tile, ctx.N);
+
+            @memset(&local_C[0], 0);
+
+            var k: usize = 0;
+            while (k < ctx.K) : (k += Tile) {
+                const k_end = @min(k + Tile, ctx.K);
+                microKernelAVX2(ctx, &local_C, i_start, j_start, k, i_end, j_end, k_end);
+            }
+
+            for (i_start..i_end) |ii| {
+                const row_offset = ii * ctx.N;
+                const local_row = ii - i_start;
+
+                var j_idx = j_start;
+                while (j_idx + Vec <= j_end) : (j_idx += Vec) {
+                    const vec_idx = j_idx - j_start;
+
+                    const c_vec = Vec8f{
+                        local_C[local_row][vec_idx],
+                        local_C[local_row][vec_idx + 1],
+                        local_C[local_row][vec_idx + 2],
+                        local_C[local_row][vec_idx + 3],
+                        local_C[local_row][vec_idx + 4],
+                        local_C[local_row][vec_idx + 5],
+                        local_C[local_row][vec_idx + 6],
+                        local_C[local_row][vec_idx + 7],
+                    };
+
+                    const dest_vec = Vec8f{
+                        ctx.c[row_offset + j_idx],
+                        ctx.c[row_offset + j_idx + 1],
+                        ctx.c[row_offset + j_idx + 2],
+                        ctx.c[row_offset + j_idx + 3],
+                        ctx.c[row_offset + j_idx + 4],
+                        ctx.c[row_offset + j_idx + 5],
+                        ctx.c[row_offset + j_idx + 6],
+                        ctx.c[row_offset + j_idx + 7],
+                    };
+
+                    const result = dest_vec + c_vec;
+                    for (0..8) |offset| {
+                        ctx.c[row_offset + j_idx + offset] = result[offset];
+                    }
+                }
+
+                while (j_idx < j_end) : (j_idx += 1) {
+                    ctx.c[row_offset + j_idx] += local_C[local_row][j_idx - j_start];
+                }
+            }
+        }
+    }
+}
+
+fn microKernelAVX2(
+    ctx: ThreadContext,
+    local_C: *[Tile][Tile]f32,
+    i_start: usize,
+    j_start: usize,
+    k_start: usize,
+    i_end: usize,
+    j_end: usize,
+    k_end: usize,
+) void {
+    var A_local: [Tile][Tile]f32 align(32) = undefined;
+    var B_local: [Tile][Tile]f32 align(32) = undefined;
+
+    const k_size = k_end - k_start;
+    const i_size = i_end - i_start;
+    const j_size = j_end - j_start;
+
+    for (0..i_size) |i| {
+        const src_idx = (i_start + i) * ctx.K + k_start;
+        for (0..k_size) |k| {
+            A_local[i][k] = ctx.a[src_idx + k];
+        }
+    }
+
+    for (0..k_size) |k| {
+        const src_idx = (k_start + k) * ctx.N + j_start;
+        for (0..j_size) |j| {
+            B_local[k][j] = ctx.b[src_idx + j];
+        }
+    }
+
+    var i: usize = 0;
+    while (i + MICRO_KERNEL_SIZE <= i_size) : (i += MICRO_KERNEL_SIZE) {
+        var j: usize = 0;
+        while (j + MICRO_KERNEL_SIZE <= j_size) : (j += MICRO_KERNEL_SIZE) {
+            var acc: [8][8]f32 align(32) = [_][8]f32{[_]f32{0} ** 8} ** 8;
+
+            var k: usize = 0;
+            while (k < k_size) : (k += 1) {
+                const a_vec = Vec8f{
+                    A_local[i][k],     A_local[i + 1][k],
+                    A_local[i + 2][k], A_local[i + 3][k],
+                    A_local[i + 4][k], A_local[i + 5][k],
+                    A_local[i + 6][k], A_local[i + 7][k],
+                };
+
+                const b_vec = Vec8f{
+                    B_local[k][j],     B_local[k][j + 1],
+                    B_local[k][j + 2], B_local[k][j + 3],
+                    B_local[k][j + 4], B_local[k][j + 5],
+                    B_local[k][j + 6], B_local[k][j + 7],
+                };
+
+                inline for (0..8) |bi| {
+                    const a_broadcast: Vec8f = @splat(a_vec[bi]);
+                    const c_vec = Vec8f{
+                        acc[bi][0], acc[bi][1], acc[bi][2], acc[bi][3],
+                        acc[bi][4], acc[bi][5], acc[bi][6], acc[bi][7],
+                    };
+                    const prod = @mulAdd(Vec8f, a_broadcast, b_vec, c_vec);
+                    inline for (0..8) |bj| {
+                        acc[bi][bj] = prod[bj];
+                    }
+                }
+            }
+
+            for (0..8) |bi| {
+                for (0..8) |bj| {
+                    local_C[i + bi][j + bj] += acc[bi][bj];
+                }
+            }
+        }
+
+        while (j < j_size) : (j += 1) {
+            for (0..8) |bi| {
+                var sum: f32 = 0;
+                for (0..k_size) |k| {
+                    sum = @mulAdd(f32, A_local[i + bi][k], B_local[k][j], sum);
+                }
+                local_C[i + bi][j] += sum;
+            }
+        }
+    }
+
+    while (i < i_size) : (i += 1) {
+        for (0..j_size) |j| {
+            var sum: f32 = 0;
+            for (0..k_size) |k| {
+                sum = @mulAdd(f32, A_local[i][k], B_local[k][j], sum);
+            }
+            local_C[i][j] += sum;
+        }
+    }
+}
 /// Computes the outer product of two 1-dimensional tensors.
 ///
 /// The outer product of two vectors `tensor` and `other` is a matrix where each element
