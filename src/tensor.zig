@@ -1,11 +1,3 @@
-//! Tensor-Zig is a tensor computation library providing efficient tensor manipulations
-//! and matrix operations.
-//!
-//! Example:
-//! ```zig
-//! const tensor = @import("tensor");
-//! var t = try tensor.zeros(f32, &[_]usize{2, 2});
-//! ```
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
