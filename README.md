@@ -189,7 +189,7 @@ We welcome contributions to Katana! Please see our [Contributing Guidelines](CON
 ## TODO
 - Full SIMD Ops Set (soon!)
 - Autograd capability/Graph Compiler
-- Extended usage guide
+- Comprehensive Examples and a Getting Started guide
 - More ML Ops and tests
 - CUDA/GPU support
 
