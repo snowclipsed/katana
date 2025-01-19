@@ -151,6 +151,15 @@ pub fn main() !void {
 
 ```
 
+## Documentation
+
+### Online Documentation
+
+Comprehensive documentation for Katana is available at: [https://snowclipsed.github.io/katana](https://snowclipsed.github.io/katana)
+
+### Offline Documentation
+
+You can generate your own documentation by cloning the repository and running `zig build docs`.
 ## License
 
 This project is licensed under the Apache License, Version 2.0 - see the [LICENSE](LICENSE) file for details.
