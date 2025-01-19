@@ -2,11 +2,13 @@
 ![alt text](katana-header.png)
 A light and efficient tensor library for Zig with a focus on simplicity and ease of use.
 
+> **Note**: Katana is currently under pre-release (v0.1.0)! We are looking for feedback to improve features and solve bugs. Please contribute [here](CONTRIBUTING.md)!
+
 ## Installation
 
 ### Prerequisites
 
-> **Important**: This library currently only works with Zig version 0.13.0. Support for the upcoming 0.14.0 version is planned.
+> **Important**: This library currently only works with Zig version 0.13.0. Support for the upcoming 0.14.0 version is planned when it is released in February 2025.
 
 Required:
 - Zig compiler version 0.13.0
