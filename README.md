@@ -42,7 +42,10 @@ zig fetch --save https://github.com/snowclipsed/katana/archive/refs/tags/v0.1.0.
    ```bash
    git clone https://github.com/snowclipsed/katana
    ```
-
+3. Then, in your zig project, run:
+   ```bash
+   zig fetch --save <path/to/katana>
+   ```
 Now, your build.zig.zon might look something like this:
 
 ```zig
@@ -54,7 +57,7 @@ Now, your build.zig.zon might look something like this:
     .dependencies = .{
         .katana = .{
             .url = "../katana",
-            .hash = "122099ca4b8c1e2b85203e73491785f91b8c585729a60d6c81b3201fcaaefe9b692c",
+            .hash = "122099ca4b8c1e2b85203e73491785f91b8c585729a60d6c81b3201fcaaefe9b692c", // this hash will be different!
         },
     },
     .paths = .{
