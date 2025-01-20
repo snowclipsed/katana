@@ -472,6 +472,49 @@ pub fn Tensor(comptime DataType: type) type {
             return result;
         }
 
+        /// Calculates the Sum along a given axis.
+        ///
+        /// Prameters:
+        /// - `Axis`: The axis which you want to sum.
+        ///
+        /// Returns:
+        /// - A `Tensor` in the resulting shape of the summination.
+        pub fn sumAlongAxis(self: *Self, axis: usize) !Tensor(DataType) {
+            if (axis >= self.shape.len) return error.IncorrectAxis;
+
+            // calculates the size of the result
+            const resultSize = helper.product(self.shape[0..axis]) * helper.product(self.shape[axis + 1 ..]);
+            const axisSize = self.shape[axis];
+
+            // calculates the resulting shap of the summed tensor
+            const result_shape = try self.allocator.alloc(usize, self.shape.len - 1);
+            defer self.allocator.free(result_shape);
+            var res_idx: usize = 0;
+            for (self.shape, 0..) |dim, i| {
+                if (i != axis) {
+                    result_shape[res_idx] = dim;
+                    res_idx += 1;
+                }
+            }
+
+            var tensor = try Tensor(DataType).init(self.allocator, result_shape);
+
+            const stride = helper.product(self.shape[axis + 1 ..]);
+
+            for (0..resultSize) |i| {
+                const innerIndex = i / stride * axisSize * stride + i % stride;
+                var sum: DataType = 0;
+
+                for (0..axisSize) |j| {
+                    sum += self.data[innerIndex + j * stride];
+                }
+
+                tensor.data[i] = sum;
+            }
+
+            return tensor;
+        }
+
         /// Calculates the index based on the given parameters.
         ///
         /// This function takes two parameters, `base` and `offset`, and returns the
