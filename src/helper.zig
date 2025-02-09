@@ -11,3 +11,11 @@ pub fn normalizeDim(dim: isize, n_dims: usize) !usize {
         return @as(usize, @intCast(adjusted));
     }
 }
+
+pub fn product(arr: []usize) usize {
+    var result: usize = 1;
+    for (arr) |value| {
+        result *= value;
+    }
+    return result;
+}
